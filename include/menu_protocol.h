@@ -1,5 +1,13 @@
 #pragma once
 
+typedef enum {
+    MENU_LIST_DONE = 0,
+    MENU_LIST_MORE = 1,
+    MENU_LIST_NO_SD = 2,
+    MENU_LIST_READ_FAILED = 3,
+    MENU_LIST_OPEN_FAILED = 4
+} MenuListingStatus;
+
 // LBAs are relative to the start of the disc. Raw ReadN skips the 12-byte sync.
 enum {
     MENU_PREPARE_COMMAND = 0xB,

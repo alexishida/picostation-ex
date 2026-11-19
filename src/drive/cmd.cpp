@@ -24,7 +24,6 @@
 extern picostation::I2S m_i2s;
 extern pseudoatomic<uint32_t> g_fileArg;
 extern pseudoatomic<picostation::FileListingStates> needFileCheckAction;
-extern pseudoatomic<int> listReadyState;
 
 static bool dir = 0;
 static bool trk_dir = 0;
@@ -187,7 +186,6 @@ void __time_critical_func(picostation::MechCommand::processLatchedCommand)()
 				{
 					DEBUG_PRINT("GOTO_ROOT\n");
 					needFileCheckAction = FileListingStates::GOTO_ROOT;
-					listReadyState = 0;
 					break;
 				}
 					
@@ -195,7 +193,6 @@ void __time_critical_func(picostation::MechCommand::processLatchedCommand)()
 				{
 					DEBUG_PRINT("GOTO_PARENT\n");
 					needFileCheckAction = FileListingStates::GOTO_PARENT;
-					listReadyState = 0;
 					break;
 				}
 					
@@ -203,7 +200,6 @@ void __time_critical_func(picostation::MechCommand::processLatchedCommand)()
 				{
 					DEBUG_PRINT("GOTO_DIRECTORY\n");
 					needFileCheckAction = FileListingStates::GOTO_DIRECTORY;
-					listReadyState = 0;
 					break;
 				}
 					
@@ -211,7 +207,6 @@ void __time_critical_func(picostation::MechCommand::processLatchedCommand)()
 				{
 					DEBUG_PRINT("GET_NEXT_CONTENTS\n");
 					needFileCheckAction = FileListingStates::GET_NEXT_CONTENTS;
-					listReadyState = 0;
 					break;
 				}
 					
@@ -256,7 +251,6 @@ void __time_critical_func(picostation::MechCommand::processLatchedCommand)()
 						
 						case EXTENDED_GET_CFG:
 							needFileCheckAction = FileListingStates::GET_CFG;
-							listReadyState = 0;
 							break;
 						
 						default:
@@ -268,7 +262,6 @@ void __time_critical_func(picostation::MechCommand::processLatchedCommand)()
 				case COMMAND_GET_COVER:
 				{
 					needFileCheckAction = FileListingStates::GET_COVER;
-					listReadyState = 0;
 					break;
 				}
 				

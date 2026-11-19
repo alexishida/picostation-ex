@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "menu_protocol.h"
 
 namespace picostation {
 class DirectoryListing {
@@ -13,6 +14,7 @@ class DirectoryListing {
     static bool getPath(const uint32_t index, char* filePath, bool* isDirectory = nullptr);
 	static void gotoParentDirectory();
     static bool getDirectoryEntries(const uint32_t offset);
+    static void setListingError(MenuListingStatus status);
 	static uint16_t getDirectoryEntriesCount();
 	static uint16_t* getFileListingData();
     static void openCover(const uint32_t index);

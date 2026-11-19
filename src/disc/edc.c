@@ -155,22 +155,9 @@ void __time_critical_func(eccedc_generate)(uint8_t* sector) {
             memmove(sector + 0x14, sector + 0x10, 4);
 
             if (!(sector[0x12] & 0x20)) {
-                uint8_t edc[4] = {0};
-                
-                //
-                // Form 1: Compute EDC
-                //
-                edc_computeblock(sector + 0x10, 0x808, edc);
-
-                if (memcmp(edc, sector + 0x818, 4) != 0)
-                {
-                    memcpy(sector + 0x818, edc, 4);
-                    
-                    //
-                    // Generate ECC P/Q codes
-                    //
-                    ecc_generate(sector, 1);
-                }
+                // Form 1 parity can be damaged even when the EDC matches.
+                edc_computeblock(sector + 0x10, 0x808, sector + 0x818);
+                ecc_generate(sector, 1);
 
             } else {
                 //

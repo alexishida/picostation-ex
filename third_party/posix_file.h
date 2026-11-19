@@ -33,6 +33,7 @@ extern "C" {
 #endif
 
 struct CueFile* create_posix_file(struct CueFile*, const char* filename, uint8_t mode);
+int reopen_posix_file(struct CueFile*);
 
 #ifdef __cplusplus
 }

@@ -73,11 +73,18 @@ bool __time_critical_func(DirectoryListing::gotoDirectory)(const uint32_t index)
 { 
     char newFolder[c_maxFilePathLength + 1];
     bool isDirectory = false;
-    bool result = getDirectoryEntry(index, newFolder, &isDirectory) && isDirectory &&
-                  combinePaths(currentDirectory, newFolder, currentDirectory);
-    
+    char newPath[c_maxFilePathLength + 1];
+    if (!getDirectoryEntry(index, newFolder, &isDirectory) || !isDirectory ||
+        !combinePaths(currentDirectory, newFolder, newPath))
+        return false;
+
+    DIR dir;
+    if (f_opendir(&dir, newPath) != FR_OK)
+        return false;
+    f_closedir(&dir);
+    strcpy(currentDirectory, newPath);
     DEBUG_PRINT("gotoDirectory: %s\n", currentDirectory);
-    return result;
+    return true;
 }
 
 bool __time_critical_func(DirectoryListing::getPath)(uint32_t index, char* filePath, bool* isDirectory)
@@ -112,99 +119,71 @@ void __time_critical_func(DirectoryListing::gotoParentDirectory)()
     currentDirectory[0] = '\0';
 }
 
+void __time_critical_func(DirectoryListing::setListingError)(MenuListingStatus status)
+{
+    fileListing->clear();
+    fileListing->addTerminator(status, 0);
+}
+
 bool __time_critical_func(DirectoryListing::getDirectoryEntries)(const uint32_t offset)
 {
     DIR dir;
-    FILINFO currentEntry;
-    FILINFO nextEntry;
-    
+    FILINFO entry;
+
     if (!sd_present)
-	{
-		fileListing->clear();
-		fileListing->addString("No SD Card", 1);
-		fileListing->addTerminator(0, 1);
-		return true;
-	}
-    
-    FRESULT res = f_opendir(&dir, currentDirectory);
-    
-    if (res != FR_OK)
     {
-        DEBUG_PRINT("f_opendir error: (%d)\n", res);
+        sd_present = f_mount(&s_fatFS, "", 1) == FR_OK;
+        if (!sd_present)
+        {
+            setListingError(MENU_LIST_NO_SD);
+            return false;
+        }
+    }
+
+    FRESULT result = f_opendir(&dir, currentDirectory);
+    if (result != FR_OK)
+    {
+        sd_present = result != FR_NOT_READY && result != FR_NOT_ENABLED;
+        setListingError(sd_present ? MENU_LIST_READ_FAILED : MENU_LIST_NO_SD);
         return false;
     }
 
     fileListing->clear();
-
-    uint16_t fileEntryCount = 0;
-    uint16_t filesProcessed = 0;
+    uint16_t visibleCount = 0;
+    uint16_t pageCount = 0;
     bool hasNext = false;
-	currentEntry.fname[0] = '\0';
-	
-    res = f_readdir(&dir, &currentEntry);
-    if (res == FR_OK && currentEntry.fname[0] != '\0')
+
+    while (visibleCount < 4096)
     {
-        res = f_readdir(&dir, &nextEntry);
-        hasNext = (res == FR_OK && nextEntry.fname[0] != '\0');
-        
-        while (true)
+        result = f_readdir(&dir, &entry);
+        if (result != FR_OK || !entry.fname[0])
+            break;
+        if (!isVisibleEntry(entry))
+            continue;
+
+        if (visibleCount++ >= offset && !hasNext)
         {
-            if (isVisibleEntry(currentEntry))
+            if (fileListing->addString(entry.fname, (entry.fattrib & AM_DIR) != 0))
+                ++pageCount;
+            else
             {
-                if (filesProcessed >= offset)
-                {
-                    if (fileListing->addString(currentEntry.fname, currentEntry.fattrib & AM_DIR ? 1 : 0) == false)
-                    {
-                        hasNext = true;
-                        break;
-                    }
-                    fileEntryCount++;
-                }
-                
-                filesProcessed++;
-                
-                if (filesProcessed >= 4096)
-                {
-                    hasNext = 0;
-                }
+                hasNext = true;
+                if (offset != 0)
+                    break;
             }
-            
-            if (hasNext == 0)
-            {
-                break;
-            }
-            
-            currentEntry = nextEntry;
-            res = f_readdir(&dir, &nextEntry);
-            hasNext = (res == FR_OK && nextEntry.fname[0] != '\0');
         }
     }
-    
-    if (offset == 0)
-    {
-		uint16_t totalCount = getDirectoryEntriesCount();
-		if (totalCount)
-		{
-			fileListing->addTerminator(hasNext ? 1 : 0, totalCount);
-		}
-		else
-		{
-			fileListing->addTerminator(0, 0xFEFE);
-		}
-        DEBUG_PRINT("file count: %d\n", totalCount);
-    }
-    else if (fileEntryCount)
-    {
-		fileListing->addTerminator(hasNext ? 1 : 0, fileEntryCount);
-		DEBUG_PRINT("Entry count: %d\n", fileEntryCount);
-    }
-    else
-	{
-		DEBUG_PRINT("Empty directory\n");
-		fileListing->addTerminator(0, 0xFEFE);
-	}
-    
+
     f_closedir(&dir);
+    if (result != FR_OK)
+    {
+        sd_present = result != FR_NOT_READY && result != FR_NOT_ENABLED;
+        setListingError(sd_present ? MENU_LIST_READ_FAILED : MENU_LIST_NO_SD);
+        return false;
+    }
+
+    const uint16_t count = offset ? pageCount : visibleCount;
+    fileListing->addTerminator(hasNext ? MENU_LIST_MORE : MENU_LIST_DONE, count ? count : 0xFEFE);
     return true;
 }
 

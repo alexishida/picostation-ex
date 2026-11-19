@@ -205,7 +205,8 @@ typedef enum
 	MENU_COMMAND_GOTO_PARENT = 0x2,
 	MENU_COMMAND_GOTO_DIRECTORY = 0x3,
 	MENU_COMMAND_MOUNT_FILE_FAST = 0x4,
-	MENU_COMMAND_MOUNT_FILE_SLOW = 0x5
+	MENU_COMMAND_MOUNT_FILE_SLOW = 0x5,
+	MENU_COMMAND_REFRESH
 } MENU_COMMAND;
 
 typedef enum
@@ -424,53 +425,59 @@ void wait_ms(uint32_t ms)
 	}
 }
 
-bool doLookup(uint16_t *itemCount, char *sectorBuffer)
+static MenuListingStatus readListingPage(uint16_t *itemCount, char *page)
 {
-	uint16_t offset = 0;
-	while (offset + 2 <= LISTING_SIZE && *itemCount < MAX_FILES)
-	{
-		uint16_t length = ((uint8_t *)sectorBuffer)[offset];
-		if (length == 0)
-		{
-			return offset + 4 <= LISTING_SIZE && sectorBuffer[offset + 1] == 1;
-		}
-		if (offset + 2 + length > LISTING_SIZE)
-			return false;
-		file_manager_init_file_data(*itemCount, sectorBuffer[offset + 1], &sectorBuffer[offset + 2], length);
-		offset += length + 2;
-		*itemCount = *itemCount + 1;
-	}
+    const uint8_t *data = (const uint8_t *)page;
+    uint16_t offset = 0;
+    while (offset + 2 <= LISTING_SIZE && *itemCount < MAX_FILES)
+    {
+        const uint16_t length = data[offset];
+        if (length == 0)
+        {
+            if (offset + 4 > LISTING_SIZE || data[offset + 1] > MENU_LIST_OPEN_FAILED)
+                return MENU_LIST_READ_FAILED;
+            const MenuListingStatus status = (MenuListingStatus)data[offset + 1];
+            if (status <= MENU_LIST_MORE && !data[offset + 2] && !data[offset + 3])
+                return MENU_LIST_READ_FAILED;
+            return status;
+        }
+        if (offset + 2 + length > LISTING_SIZE || data[offset + 1] > 1)
+            return MENU_LIST_READ_FAILED;
+        file_manager_init_file_data(*itemCount, data[offset + 1], page + offset + 2, length);
+        offset += length + 2;
+        ++*itemCount;
+    }
 
-	return false;
+    return *itemCount == MAX_FILES ? MENU_LIST_DONE : MENU_LIST_READ_FAILED;
 }
 
-uint32_t list_load(void *sectorBuffer, uint8_t command, uint16_t argument)
+static uint32_t list_load(void *sectorBuffer, uint8_t command, uint16_t argument, MenuListingStatus *status)
 {
-	uint16_t fileEntryCount = 0;
+    uint16_t fileEntryCount = 0;
 
-	bool hasNext = true;
-	while (hasNext)
-	{
-		memset(sectorBuffer, 0, MENU_RAW_SECTOR_BYTES);
-		sendMenuCommand(command, argument);
-		startCDROMRead(
-			100,
-			sectorBuffer,
-			1,
-			MENU_RAW_SECTOR_BYTES,
-			true,
-			true);
+    do
+    {
+        memset(sectorBuffer, 0, MENU_RAW_SECTOR_BYTES);
+        sendMenuCommand(command, argument);
+        startCDROMRead(100, sectorBuffer, 1, MENU_RAW_SECTOR_BYTES, true, true);
+        if (!waitingForInt5)
+        {
+            *status = MENU_LIST_READ_FAILED;
+            return 0;
+        }
 
-		uint16_t previousCount = fileEntryCount;
-		hasNext = doLookup(&fileEntryCount, (char *)sectorBuffer + MENU_USER_DATA_OFFSET) &&
-		          fileEntryCount > previousCount;
-		command = COMMAND_GET_NEXT_CONTENTS;
-		argument = fileEntryCount;
-	}
+        const uint16_t previousCount = fileEntryCount;
+        *status = readListingPage(&fileEntryCount, (char *)sectorBuffer + MENU_USER_DATA_OFFSET);
+        if (*status == MENU_LIST_MORE && fileEntryCount == previousCount)
+            *status = MENU_LIST_READ_FAILED;
+        if (*status > MENU_LIST_MORE)
+            return 0;
+        command = COMMAND_GET_NEXT_CONTENTS;
+        argument = fileEntryCount;
+    } while (*status == MENU_LIST_MORE);
 
-	file_manager_sort(fileEntryCount);
-	file_manager_clean_list(&fileEntryCount);
-	return fileEntryCount;
+    file_manager_sort(fileEntryCount);
+    return fileEntryCount;
 }
 
 int main(int argc, const char **argv)
@@ -546,6 +553,7 @@ int main(int argc, const char **argv)
 	unsigned filenameDelay = 30;
 	
 	uint32_t fileEntryCount = 0;
+	MenuListingStatus listingStatus = MENU_LIST_DONE;
 
 	uint16_t selectedindex = 0;
 	uint16_t parentSelections[c_maxFilePathLength];
@@ -693,7 +701,7 @@ int main(int argc, const char **argv)
 				if (fileEntryCount == 0)
 				{
 					pressedButtons &= ~(BUTTON_MASK_UP | BUTTON_MASK_DOWN | BUTTON_MASK_LEFT | BUTTON_MASK_RIGHT |
-					                    BUTTON_MASK_L1 | BUTTON_MASK_R1 | BUTTON_MASK_X);
+					                    BUTTON_MASK_L1 | BUTTON_MASK_R1);
 				}
 				if (pressedButtons & BUTTON_MASK_UP)
 				{
@@ -730,6 +738,10 @@ int main(int argc, const char **argv)
 						bootNotice = NULL;
 						bootMenu = true;
 					}
+				}
+				else if ((pressedButtons & BUTTON_MASK_X) && listingStatus != MENU_LIST_DONE)
+				{
+					currentCommand = MENU_COMMAND_REFRESH;
 				}
 				else if ((pressedButtons & BUTTON_MASK_CIRCLE) && directoryDepth)
 				{
@@ -826,7 +838,14 @@ int main(int argc, const char **argv)
 				}
 				else
 				{
-					printString(chain, &font, 40, 40, "Empty Folder");
+					const char *message = "Empty Folder";
+					if (listingStatus == MENU_LIST_NO_SD)
+						message = "No SD Card";
+					else if (listingStatus == MENU_LIST_OPEN_FAILED)
+						message = "Unable to open folder";
+					else if (listingStatus == MENU_LIST_READ_FAILED)
+						message = "Unable to read folder";
+					printString(chain, &font, 40, 40, message);
 				}
 
 				if (mounting)
@@ -847,8 +866,8 @@ int main(int argc, const char **argv)
 				}
 				else
 				{
-					if (fileEntryCount)
-						drawMenuAction(chain, &font, 12, 218, BUTTON_MASK_X, "Open");
+					if (fileEntryCount || listingStatus != MENU_LIST_DONE)
+						drawMenuAction(chain, &font, 12, 218, BUTTON_MASK_X, fileEntryCount ? "Open" : "Retry");
 					drawMenuAction(chain, &font, 62, 218, BUTTON_MASK_SELECT, "Credits");
 					if (directoryDepth)
 						drawMenuAction(chain, &font, 156, 218, BUTTON_MASK_CIRCLE, "Back");
@@ -889,20 +908,26 @@ int main(int argc, const char **argv)
 			filenameDelay = 30;
 			if (currentCommand == MENU_COMMAND_GOTO_ROOT)
 			{
-				fileEntryCount = list_load(sectorBuffer, COMMAND_GOTO_ROOT, 0);
+				fileEntryCount = list_load(sectorBuffer, COMMAND_GOTO_ROOT, 0, &listingStatus);
 			}
 			else if (currentCommand == MENU_COMMAND_GOTO_PARENT)
 			{
-				fileEntryCount = list_load(sectorBuffer, COMMAND_GOTO_PARENT, 0);
+				fileEntryCount = list_load(sectorBuffer, COMMAND_GOTO_PARENT, 0, &listingStatus);
 				const uint16_t parentSelection = parentSelections[--directoryDepth];
 				selectedindex = fileEntryCount ? MIN(parentSelection, fileEntryCount - 1) : 0;
 			}
 			else if (currentCommand == MENU_COMMAND_GOTO_DIRECTORY)
 			{
 				uint16_t index = file_manager_get_file_index(selectedindex);
-				fileEntryCount = list_load(sectorBuffer, COMMAND_GOTO_DIRECTORY, index);
-				if (directoryDepth < sizeof(parentSelections) / sizeof(parentSelections[0]))
+				fileEntryCount = list_load(sectorBuffer, COMMAND_GOTO_DIRECTORY, index, &listingStatus);
+				if (listingStatus != MENU_LIST_OPEN_FAILED &&
+				    directoryDepth < sizeof(parentSelections) / sizeof(parentSelections[0]))
 					parentSelections[directoryDepth++] = selectedindex;
+				selectedindex = 0;
+			}
+			else if (currentCommand == MENU_COMMAND_REFRESH)
+			{
+				fileEntryCount = list_load(sectorBuffer, COMMAND_GET_NEXT_CONTENTS, 0, &listingStatus);
 				selectedindex = 0;
 			}
 			else if ((currentCommand == MENU_COMMAND_MOUNT_FILE_FAST) || (currentCommand == MENU_COMMAND_MOUNT_FILE_SLOW))

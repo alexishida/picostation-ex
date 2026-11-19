@@ -46,35 +46,6 @@ void file_manager_quicksort(uint16_t left, uint16_t right)
     if (i < right) file_manager_quicksort(i, right);
 }
 
-void file_manager_clean_list(uint16_t* count)
-{
-    int i = 0;
-    while (i < *count - 1)
-    {
-        int binIndex = fileIndexBuffer[i];
-        const char* binName = fileDataBuffer[binIndex].filename;
-        size_t len = strlen(binName);
-
-        if (len >= 4 && strcmp(binName + len - 4, ".bin") == 0)
-        {
-            int cueIndex = fileIndexBuffer[i + 1];
-            const char* cueName = fileDataBuffer[cueIndex].filename;
-            if (strlen(cueName) == len &&
-                strncmp(binName, cueName, len - 4) == 0 &&
-                strcmp(cueName + len - 4, ".cue") == 0)
-            {
-                for (int j = i; j < *count - 1; ++j)
-                {
-                    fileIndexBuffer[j] = fileIndexBuffer[j + 1];
-                }
-                (*count)--;
-                continue;
-            }
-        }
-        i++;
-    }
-}
-
 void file_manager_init()
 {
 	fileIndexBuffer = (uint16_t*)malloc(sizeof(uint16_t) * MAX_FILE_ITEMS);

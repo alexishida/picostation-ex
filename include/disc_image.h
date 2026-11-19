@@ -38,6 +38,7 @@ class DiscImage {
     CueDisc m_cueDisc{};
     bool m_hasData = false;
     int m_currentLogicalTrack = 0;
+    uint64_t m_nextReadRecovery = 0;
     bool skip_bootsector = false;
     bool skip_bootsector_fix = false;
     bool skip_edc = false;

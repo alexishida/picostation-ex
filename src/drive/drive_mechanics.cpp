@@ -39,82 +39,49 @@ void __time_critical_func(picostation::DriveMechanics::setSector)(uint32_t step,
 {
 	m_i2s.i2s_set_state(0);
 
-	while(step != 0)
-	{
-        if(rev == 0)
+    const uint32_t sectorLimit = c_sectorMax;
+    m_sector = std::min(m_sector, sectorLimit);
+    cur_zone = std::lower_bound(zone, zone + ZONE_MAX, m_sector) - zone;
+
+    while (step != 0)
+    {
+        if (!rev)
         {
-            uint32_t sbze = zone[cur_zone] - m_sector;
-            uint32_t sbreq = step * sect_per_track[cur_zone];
-            uint32_t do_steps = ((sbze > sbreq) ? sbreq : sbze) / sect_per_track[cur_zone];
-            m_sector += do_steps * sect_per_track[cur_zone];
-            
-            if(m_sector > c_sectorMax)
+            const uint32_t limit = cur_zone == ZONE_MAX ? sectorLimit :
+                                   std::min(zone[cur_zone], sectorLimit);
+            const uint32_t sectorsPerTrack = sect_per_track[cur_zone];
+            const uint32_t steps = std::min(step, (limit - m_sector) / sectorsPerTrack);
+            m_sector += steps * sectorsPerTrack;
+            step -= steps;
+            if (step == 0)
+                break;
+            if (limit == sectorLimit)
             {
-                static uint32_t last_sector_max = 0;
-                static uint8_t last_zone_max = 0;
-
-                if (!last_sector_max || last_sector_max != m_sector)
-                {
-                    last_sector_max = m_sector;
-                    for (last_zone_max = 0; last_zone_max <= ZONE_MAX; last_zone_max++)
-                    {
-                        if (zone[last_zone_max] > c_sectorMax)
-                        {
-                            last_zone_max--;
-                            break;
-                        }
-                    }
-                }
-
-                m_sector = c_sectorMax;
-                cur_zone = last_zone_max;
+                m_sector = sectorLimit;
                 break;
             }
-            
-            step -= do_steps;
-            if(step > 0 && cur_zone < ZONE_MAX)
-            {
-                cur_zone++;
-            }
+            ++cur_zone;
         }
         else
         {
-            uint32_t sect_before_ze;
-            uint32_t do_steps;
-            uint32_t req_sect_step = step * sect_per_track[cur_zone];
-
-            if(cur_zone > 0)
-            {
-                sect_before_ze = m_sector - zone[cur_zone - 1];
-            }
-            else
-            {
-                sect_before_ze = req_sect_step;
-            }
-
-            do_steps = ((sect_before_ze > req_sect_step) ? req_sect_step : sect_before_ze) / sect_per_track[cur_zone];
-            
-            if(m_sector > (do_steps * sect_per_track[cur_zone]))
-            {
-                m_sector -= do_steps * sect_per_track[cur_zone];
-            }
-            else
+            const uint32_t sectorsPerTrack = sect_per_track[cur_zone];
+            const uint32_t lower = cur_zone == 0 ? 0 : zone[cur_zone - 1];
+            const uint32_t steps = std::min(step, (m_sector - lower) / sectorsPerTrack);
+            m_sector -= steps * sectorsPerTrack;
+            step -= steps;
+            if (step == 0)
+                break;
+            if (cur_zone == 0)
             {
                 m_sector = 0;
-                cur_zone = 0;
                 break;
             }
-            
-			step -= do_steps;
-           
-			if((cur_zone > 0) && (step > 0))
-			{
-                cur_zone--;
-            }
+            --cur_zone;
         }
 	}
 	
-	skip_subq = m_sector;
+    cur_zone = std::lower_bound(zone, zone + ZONE_MAX, m_sector) - zone;
+    skip_subq = m_sector;
 #ifdef DEBUG_CMD	
 	DEBUG_PRINT("set sector %d\n", m_sector-4500);
 #endif

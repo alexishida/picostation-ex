@@ -16,4 +16,3 @@ void file_manager_init_file_data(uint16_t index, uint8_t flag, char* filename, u
 fileData* file_manager_get_file_data(uint16_t index);
 uint16_t file_manager_get_file_index(uint16_t index);
 void file_manager_sort(uint16_t count);
-void file_manager_clean_list(uint16_t* count);

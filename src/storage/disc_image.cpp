@@ -1,6 +1,7 @@
 #include "disc_image.h"
 
 #include <ctype.h>
+#include <algorithm>
 #include <new>
 #include <stddef.h>
 #include <stdio.h>
@@ -475,7 +476,8 @@ FRESULT __time_critical_func(picostation::DiscImage::load)(const TCHAR *targetCu
     DEBUG_PRINT("Disc track count: %d\n", m_cueDisc.trackCount);
 
     // Lead-out
-    m_cueDisc.tracks[m_cueDisc.trackCount + 1].fileOffset = m_cueDisc.tracks[m_cueDisc.trackCount].indices[1] + m_cueDisc.tracks[m_cueDisc.trackCount].size;
+    const auto& lastTrack = m_cueDisc.tracks[m_cueDisc.trackCount];
+    m_cueDisc.tracks[m_cueDisc.trackCount + 1].fileOffset = lastTrack.indices[0] + lastTrack.size;
     m_cueDisc.tracks[m_cueDisc.trackCount + 1].indices[0] = m_cueDisc.tracks[m_cueDisc.trackCount + 1].fileOffset;
     m_cueDisc.tracks[m_cueDisc.trackCount + 1].indices[1] = m_cueDisc.tracks[m_cueDisc.trackCount + 1].indices[0];
 
@@ -507,6 +509,7 @@ void __time_critical_func(picostation::DiscImage::unload)()
     releaseTracks(m_cueDisc);
     m_cueDisc.trackCount = 0;
     m_hasData = false;
+    m_nextReadRecovery = 0;
 }
 
 void __time_critical_func(picostation::DiscImage::makeDummyCue)()
@@ -592,30 +595,45 @@ bool __time_critical_func(picostation::DiscImage::readSectorSD)(void *buffer, in
 
         const bool isData = track.trackType == TRACK_TYPE_DATA;
         auto* file = track.file ? static_cast<FIL*>(track.file->opaque) : nullptr;
-        if (file && static_cast<uint32_t>(adjustedSector) >= track.fileOffset)
+        const uint32_t firstStoredSector = track.indices[0] + track.syntheticPregap;
+        if (file && static_cast<uint32_t>(adjustedSector) >= std::max(track.fileOffset, firstStoredSector))
         {
             const FSIZE_t offset = static_cast<FSIZE_t>(adjustedSector - track.fileOffset) * c_cdSamplesBytes;
-            UINT bytesRead = 0;
-            FRESULT result = f_lseek(file, offset);
-            if (result == FR_OK && f_tell(file) == offset)
+            for (unsigned attempt = 0; attempt < 2; ++attempt)
             {
-                if (skip_edc || !isData)
+                UINT bytesRead = 0;
+                FRESULT result = f_lseek(file, offset);
+                if (result == FR_OK && f_tell(file) == offset)
                 {
-                    result = f_read_scramble(file, buffer, c_cdSamplesBytes, &bytesRead, scramling, isData);
-                }
-                else
-                {
-                    result = f_read(file, s_userData, c_cdSamplesBytes, &bytesRead);
-                    if (result == FR_OK && bytesRead == c_cdSamplesBytes)
+                    if (skip_edc || !isData)
                     {
-                        eccedc_generate(reinterpret_cast<uint8_t*>(s_userData));
-                        scramble_data(static_cast<uint32_t*>(buffer), s_userData, scramling, c_cdSamplesBytes / 2);
+                        result = f_read_scramble(file, buffer, c_cdSamplesBytes, &bytesRead,
+                                                 scramling, isData);
                     }
+                    else
+                    {
+                        result = f_read(file, s_userData, c_cdSamplesBytes, &bytesRead);
+                        if (result == FR_OK && bytesRead == c_cdSamplesBytes)
+                        {
+                            eccedc_generate(reinterpret_cast<uint8_t*>(s_userData));
+                            scramble_data(static_cast<uint32_t*>(buffer), s_userData, scramling,
+                                          c_cdSamplesBytes / 2);
+                        }
+                    }
+                    if (result == FR_OK && bytesRead == c_cdSamplesBytes)
+                        return true;
                 }
-                if (result == FR_OK && bytesRead == c_cdSamplesBytes)
-                {
-                    return true;
-                }
+
+                if (attempt != 0 || (result != FR_DISK_ERR && result != FR_NOT_READY &&
+                                     result != FR_INVALID_OBJECT))
+                    break;
+                const uint64_t now = time_us_64();
+                if (now < m_nextReadRecovery)
+                    break;
+                // Avoid reopening the same failing image on every sector.
+                m_nextReadRecovery = now + 250000;
+                if (reopen_posix_file(track.file) != FR_OK)
+                    break;
             }
             // Keep the stream timing without reusing data from a previous read.
             memset(buffer, 0, c_cdSamplesBytes * 2);

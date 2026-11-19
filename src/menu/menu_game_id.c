@@ -124,10 +124,18 @@ static const char *findBootPath(const char *config, size_t size, char path[2049]
         while (next < end && *next && *next != '\n')
             ++next;
 
+        while (line != next && isspace((unsigned char)*line))
+            ++line;
         if (next - line >= 4 && !memcmp(line, "BOOT", 4))
         {
             const char *value = line + 4;
-            while (value != next && (*value == '=' || isspace((unsigned char)*value)))
+            while (value != next && isspace((unsigned char)*value))
+                ++value;
+            if (value != next && *value == '=')
+                ++value;
+            else
+                value = next;
+            while (value != next && isspace((unsigned char)*value))
                 ++value;
             const char *valueEnd = value;
             while (valueEnd != next && !isspace((unsigned char)*valueEnd))
@@ -157,8 +165,19 @@ bool getMenuGameId(void *sectorBuffer, char gameId[20], char executable[40])
         bootPath = findBootPath(sectorBuffer, 2048, path);
     snprintf(executable, 40, "%s", bootPath);
 
-    if (!strcmp(bootPath, "cdrom:\\psx.exe") || !strcmp(bootPath, "cdrom:\\PSX.EXE;1") ||
-        !strcmp(bootPath, "cdrom:\\psx.exe;1") || !strcmp(bootPath, "cdrom:PSX.EXE;1"))
+    const char *filename = bootPath;
+    for (const char *p = bootPath; *p; ++p)
+        if (*p == ':' || *p == '/' || *p == '\\')
+            filename = p + 1;
+
+    const char *version = strchr(filename, ';');
+    const size_t nameLength = version ? (size_t)(version - filename) : strlen(filename);
+    const char genericName[] = "PSX.EXE";
+    bool generic = nameLength == sizeof(genericName) - 1;
+    for (size_t i = 0; generic && i < nameLength; ++i)
+        generic = toupper((unsigned char)filename[i]) == genericName[i];
+
+    if (generic)
     {
         const char *serial = "0";
         const char *prefix = "SLPS_";
@@ -178,14 +197,18 @@ bool getMenuGameId(void *sectorBuffer, char gameId[20], char executable[40])
             }
         }
         snprintf(gameId, 20, "cdrom:%s%s;1", prefix, serial);
+        return true;
     }
-    else
-    {
-        const size_t length = strlen(bootPath);
-        if (length >= 20)
-            snprintf(gameId, 20, "cdrom:%s", bootPath + length - 13);
-        else
-            snprintf(gameId, 20, "%s%s", bootPath, strstr(bootPath, ";1") ? "" : ";1");
-    }
+
+    const size_t prefixLength = sizeof("cdrom:") - 1;
+    const size_t filenameLength = strlen(filename);
+    const size_t idLength = prefixLength + filenameLength + (version ? 0 : 2);
+    if (!nameLength || idLength >= 20)
+        return false;
+    memcpy(gameId, "cdrom:", prefixLength);
+    memcpy(gameId + prefixLength, filename, filenameLength);
+    if (!version)
+        memcpy(gameId + prefixLength + filenameLength, ";1", 2);
+    gameId[idLength] = '\0';
     return true;
 }

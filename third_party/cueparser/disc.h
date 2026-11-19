@@ -55,6 +55,7 @@ struct CueTrack {
                                  // physically present within the data files
                                  // the lead-in isn't taken into account
     uint32_t postgap;            // size of the postgap in sectors
+    uint32_t syntheticPregap;    // sectors added by PREGAP without corresponding file data
     enum CueTrackType trackType;
     int compressed;
     int digitalCopyPermitted;

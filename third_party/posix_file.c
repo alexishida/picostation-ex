@@ -32,6 +32,13 @@ SOFTWARE.
 
 static void posix_destroy(struct CueFile *file) {}
 
+static void close_file(FIL *fp) {
+    DWORD *linkmap = fp->cltbl;
+    if (fp->obj.fs)
+        f_close(fp);
+    free(linkmap);
+}
+
 static void posix_close(struct CueFile *file, struct CueScheduler *scheduler, void (*cb)(struct CueFile *, struct CueScheduler *)) {
     FIL *fp = (FIL *)file->opaque;
     
@@ -40,12 +47,9 @@ static void posix_close(struct CueFile *file, struct CueScheduler *scheduler, vo
 		return;
 	}
 	
-    if (fp->cltbl)
-    {
-		free(fp->cltbl);
-	}
-    f_close(fp);
+    close_file(fp);
     free(fp);
+    free(file->filename);
     
     if (scheduler)
 	{
@@ -88,24 +92,16 @@ static void posix_write(struct CueFile *file, struct CueScheduler *scheduler, ui
 #endif
 }
 
-struct CueFile *create_posix_file(struct CueFile *file, const char *filename, uint8_t mode) {
-    
-    FIL *fp = malloc(sizeof(FIL));
-    if (!fp)
-	{
-		return NULL;
-	}
-	
-    if(f_open(fp, filename, mode))
-    {
-		free(fp);
-		return NULL;
-	}
+static FRESULT open_file(FIL *fp, const char *filename, uint8_t mode) {
+    memset(fp, 0, sizeof(*fp));
+    FRESULT r = f_open(fp, filename, mode);
+    if (r != FR_OK)
+        return r;
     
     DWORD cltbltmp = 1;
     fp->cltbl = &cltbltmp;
     
-    FRESULT r = f_lseek(fp, CREATE_LINKMAP);
+    r = f_lseek(fp, CREATE_LINKMAP);
     
     if (r == FR_NOT_ENOUGH_CORE)
 	{
@@ -130,7 +126,26 @@ struct CueFile *create_posix_file(struct CueFile *file, const char *filename, ui
 	{
 		fp->cltbl = NULL;
 	}
-    
+
+    return FR_OK;
+}
+
+int reopen_posix_file(struct CueFile *file) {
+    FIL *fp = file->opaque;
+    close_file(fp);
+    return open_file(fp, file->filename, FA_READ);
+}
+
+struct CueFile *create_posix_file(struct CueFile *file, const char *filename, uint8_t mode) {
+    FIL *fp = malloc(sizeof(*fp));
+    char *path = malloc(strlen(filename) + 1);
+    if (!fp || !path || open_file(fp, filename, mode) != FR_OK) {
+        free(path);
+        free(fp);
+        return NULL;
+    }
+    strcpy(path, filename);
+
     file->opaque = fp;
     file->destroy = posix_destroy;
     file->close = posix_close;
@@ -138,7 +153,7 @@ struct CueFile *create_posix_file(struct CueFile *file, const char *filename, ui
     file->read = posix_read;
     file->write = posix_write;
     file->cfilename = NULL;
-    file->filename = NULL;
+    file->filename = path;
     file->references = 1;
     return file->opaque ? file : NULL;
 }

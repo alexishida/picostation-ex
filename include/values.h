@@ -28,6 +28,9 @@ enum : unsigned int {
     SCOR = GPIO_SCOR,
     SQSO = GPIO_SQSO,
     CLK = GPIO_CLK,
+#ifdef GPIO_MECHACON_CLK
+    MECHACON_CLK = GPIO_MECHACON_CLK,
+#endif
     LED = GPIO_LED,
     CMD_DATA = GPIO_CMD_DATA,
     CMD_CK = GPIO_CMD_CK,

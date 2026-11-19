@@ -5,7 +5,6 @@
 
 #include "cmd.h"
 #include "disc_image.h"
-#include "directory_listing.h"
 #include "drive_mechanics.h"
 #include "hardware/pwm.h"
 #include <hardware/i2c.h>
@@ -34,7 +33,8 @@
 picostation::I2S m_i2s;
 picostation::MechCommand m_mechCommand;
 
-bool picostation::g_subqDelay = false;  // core0: r/w
+pseudoatomic<bool> picostation::g_subqDelay;
+static volatile alarm_id_t s_subqAlarm;
 
 static int s_currentPlaybackSpeed = 1;
 int picostation::g_targetPlaybackSpeed = 1;  // core0: r/w
@@ -79,6 +79,19 @@ static picostation::PWMSettings pwmMainClock =
 	.invert = false,
 	.level = 1
 };
+
+#ifdef GPIO_MECHACON_CLK
+static picostation::PWMSettings pwmMechaconClock = {
+    .gpio = Pin::MECHACON_CLK,
+    .wrap = PICOSTATION_MECHACON_CLOCK_PERIOD - 1,
+    .clkdiv = 1,
+    .invert = false,
+    .level = PICOSTATION_MECHACON_CLOCK_PERIOD / 2
+};
+static uint32_t s_mechaconClockMask;
+#else
+static constexpr uint32_t s_mechaconClockMask = 0;
+#endif
 
 static void initPWM(picostation::PWMSettings *settings);
 
@@ -167,6 +180,7 @@ static void __time_critical_func(mech_irq_hnd)()
 
 static void __time_critical_func(send_subq)(const int Sector)
 {
+    s_subqAlarm = 0;
 	picostation::SubQ subq(&picostation::g_discImage);
 	
 	subq.start_subq(Sector);
@@ -215,16 +229,18 @@ static void __time_critical_func(send_subq)(const int Sector)
         }
         else if (m_mechCommand.getSens(SENS::GFS))
         {
-            if (m_i2s.getSectorSending() == currentSector)
+            if (m_i2s.getSectorSending() == currentSector && !g_subqDelay.Load())
             {
                 g_driveMechanics.moveToNextSector();
                 g_subqDelay = true;
 
-                add_alarm_in_us(time_us_64() - m_i2s.getLastSectorTime() + c_MaxSubqDelayTime,
+                s_subqAlarm = add_alarm_in_us(time_us_64() - m_i2s.getLastSectorTime() + c_MaxSubqDelayTime,
 					[](alarm_id_t id, void *user_data) -> int64_t {
 						send_subq((const int) user_data);
 						return 0;
 					}, (void *) currentSector, true);
+                if (s_subqAlarm < 0)
+                    g_subqDelay = false;
             }
         }
     }
@@ -296,6 +312,10 @@ void __time_critical_func(picostation::initHW)()
     initPWM(&pwmMainClock);
     initPWM(&pwmDataClock);
     initPWM(&pwmLRClock);
+#ifdef GPIO_MECHACON_CLK
+    initPWM(&pwmMechaconClock);
+    s_mechaconClockMask = 1u << pwmMechaconClock.sliceNum;
+#endif
 
     uint32_t i2s_pio_offset = pio_add_program(PIOInstance::I2S_DATA, &i2s_data_program);
     i2s_data_program_init(PIOInstance::I2S_DATA, SM::I2S_DATA, i2s_pio_offset, Pin::DA15, Pin::DA16);
@@ -307,7 +327,8 @@ void __time_critical_func(picostation::initHW)()
     g_subqOffset = pio_add_program(PIOInstance::SUBQ, &subq_program);
 
     pio_sm_set_enabled(PIOInstance::I2S_DATA, SM::I2S_DATA, true);
-    pwm_set_mask_enabled((1 << pwmLRClock.sliceNum) | (1 << pwmDataClock.sliceNum) | (1 << pwmMainClock.sliceNum));
+    pwm_set_mask_enabled(s_mechaconClockMask | (1u << pwmLRClock.sliceNum) |
+                         (1u << pwmDataClock.sliceNum) | (1u << pwmMainClock.sliceNum));
 
     uint64_t startTime = time_us_64();
     gpio_set_dir(Pin::RESET, GPIO_OUT);
@@ -372,12 +393,13 @@ void __time_critical_func(picostation::updatePlaybackSpeed)()
     {
         s_currentPlaybackSpeed = g_targetPlaybackSpeed;
         const unsigned int clock_div = (s_currentPlaybackSpeed == 1) ? c_clockDivNormal : c_clockDivDouble;
-        pwm_set_mask_enabled(0);
+        pwm_set_mask_enabled(s_mechaconClockMask);
         pwm_config_set_clkdiv_int(&pwmDataClock.config, clock_div);
         pwm_config_set_clkdiv_int(&pwmLRClock.config, clock_div);
         pwm_hw->slice[pwmDataClock.sliceNum].div = pwmDataClock.config.div;
         pwm_hw->slice[pwmLRClock.sliceNum].div = pwmLRClock.config.div;
-        pwm_set_mask_enabled((1 << pwmLRClock.sliceNum) | (1 << pwmDataClock.sliceNum) | (1 << pwmMainClock.sliceNum));
+        pwm_set_mask_enabled(s_mechaconClockMask | (1u << pwmLRClock.sliceNum) |
+                             (1u << pwmDataClock.sliceNum) | (1u << pwmMainClock.sliceNum));
         DEBUG_PRINT("x%i\n", s_currentPlaybackSpeed);
     }
 }
@@ -386,6 +408,10 @@ void __time_critical_func(picostation::reset)()
 {
     DEBUG_PRINT("RESET!\n");
     m_i2s.i2s_set_state(0);
+    gpio_set_irq_enabled(Pin::XLAT, GPIO_IRQ_EDGE_FALL, false);
+    if (s_subqAlarm > 0)
+        cancel_alarm(s_subqAlarm);
+    s_subqAlarm = 0;
     pio_sm_set_enabled(PIOInstance::SUBQ, SM::SUBQ, false);
     pio_sm_set_enabled(PIOInstance::SOCT, SM::SOCT, false);
     pio_sm_restart(PIOInstance::MECHACON, SM::MECHACON);
@@ -397,21 +423,7 @@ void __time_critical_func(picostation::reset)()
     g_targetPlaybackSpeed = 1;
     updatePlaybackSpeed();
     
-    if (s_resetPending == 2)
-    {
-        if (s_dataLocation != picostation::DiscImage::DataLocation::RAM)
-		{
-			g_discImage.unload();
-			g_discImage.makeDummyCue();
-			m_i2s.menu_active = true;
-			g_discImage.set_skip_bootsector(false);
-			g_discImage.set_skip_bootsector_fix(false);
-			g_discImage.set_skip_edc(false);
-            m_mechCommand.resetBootSectorPattern();
-		}
-		picostation::DirectoryListing::gotoRoot();
-		s_dataLocation = picostation::DiscImage::DataLocation::RAM;
-    }
+    m_i2s.resetFromConsole(s_resetPending == 2);
 
     mechacon_program_init(PIOInstance::MECHACON, SM::MECHACON, s_mechachonOffset, Pin::CMD_DATA);
     g_subqDelay = false;
@@ -420,8 +432,6 @@ void __time_critical_func(picostation::reset)()
     gpio_put(Pin::SCOR, 0);
     gpio_put(Pin::SQSO, 0);
 	g_driveMechanics.resetDrive();
-	m_i2s.reinitI2S();
-    g_discImage.set_skip_bootsector(false);
     m_mechCommand.resetBootSectorPattern();
 	
 	uint64_t startTime = time_us_64();
@@ -443,6 +453,8 @@ void __time_critical_func(picostation::reset)()
 	}
 	
     pio_sm_set_enabled(PIOInstance::MECHACON, SM::MECHACON, true);
+    gpio_acknowledge_irq(Pin::XLAT, GPIO_IRQ_EDGE_FALL);
+    gpio_set_irq_enabled(Pin::XLAT, GPIO_IRQ_EDGE_FALL, true);
     
 	s_resetPending = 0;
 	gpio_set_irq_enabled(Pin::RESET, GPIO_IRQ_LEVEL_LOW, true);

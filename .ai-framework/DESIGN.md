@@ -7,7 +7,7 @@ O menu roda no PlayStation e serve para navegar pelo cartão SD e iniciar jogos.
 - O navegador começa na raiz do cartão, permite entrar em pastas, subir ao diretório pai e voltar à raiz. A listagem é paginada e inclui pastas e entradas CUE visíveis. O firmware envia os nomes dos jogos sem a extensão `.cue`.
 - X abre a pasta ou a janela de opções do jogo. Fast Boot e Regular Boot iniciam a montagem do CUE selecionado. Círculo fecha a janela ou sobe ao diretório pai. Select abre os créditos.
 - A janela de boot permite alterar a correção EDC e o Bootsector Fix. O firmware usa um clock fixo e o menu ainda não executa cheats.
-- Mantenha legíveis e distinguíveis os estados de carregamento, pasta vazia e cartão ausente. O firmware envia a indicação `No SD Card` na listagem quando o cartão está indisponível.
+- O terminador da listagem indica continuação, fim, cartão ausente, falha de leitura ou falha ao abrir uma pasta. O menu exibe o erro e permite tentar novamente com X. Se o cartão estiver indisponível, o firmware tenta montá-lo ao receber uma nova solicitação de listagem.
 
 Referências locais da navegação e da montagem. [Listagem do SD](../src/storage/directory_listing.cpp) · [Formato da listagem](../include/listingBuilder.h) · [Montagem e transferência](../src/hardware/i2s.cpp)
 

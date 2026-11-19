@@ -23,7 +23,11 @@ void picostation::ModChip::endLicenseSequence() {
 }
 
 void picostation::ModChip::init() {
+#ifdef PICOSTATION_SCEX_BAUD
+    uart_init(uart1, PICOSTATION_SCEX_BAUD);
+#else
     uart_init(uart1, 250);
+#endif
     gpio_set_function(Pin::SCEX_DATA, GPIO_FUNC_UART);
     gpio_set_outover(Pin::SCEX_DATA, GPIO_OVERRIDE_INVERT);
     uart_set_hw_flow(uart1, false, false);

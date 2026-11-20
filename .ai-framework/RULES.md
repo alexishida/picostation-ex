@@ -14,6 +14,8 @@ Confira o código e o CMake para determinar o comportamento do checkout. Ao alte
 
 ## Build e validação
 
+Quando o usuário pedir para gerar o release, gere o pacote local na pasta `release/`. Publique uma release no GitHub somente se o usuário pedir explicitamente essa publicação. Um pedido de commit e push junto com a geração do pacote autoriza apenas o envio do código e da documentação ao remoto.
+
 O build padrão do PicoStation EX gera o pacote completo. Execute o comando na raiz do projeto com as ferramentas configuradas.
 
 ```sh

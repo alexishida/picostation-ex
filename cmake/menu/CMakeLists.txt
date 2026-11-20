@@ -59,6 +59,8 @@ add_executable(
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE common)
 target_include_directories(${PROJECT_NAME} PRIVATE "${PICOSTATION_ROOT}/include")
+target_compile_options(common PRIVATE $<$<CONFIG:Release>:-Os>)
+target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:-Os>)
 
 # Define a CMake macro that invokes convertImage.py in order to generate VRAM
 # texture data from an image file.
@@ -100,7 +102,7 @@ add_custom_command(
     OUTPUT "${menu_executable}"
     COMMAND "${Python3_EXECUTABLE}"
             "${PICOSTATION_ROOT}/third_party/ps1-bare-metal/tools/convertExecutable.py"
-            "$<TARGET_FILE:${PROJECT_NAME}>" "${menu_executable}"
+            --omit-zero-fill "$<TARGET_FILE:${PROJECT_NAME}>" "${menu_executable}"
     DEPENDS ${PROJECT_NAME} "${PICOSTATION_ROOT}/third_party/ps1-bare-metal/tools/convertExecutable.py"
     VERBATIM
 )

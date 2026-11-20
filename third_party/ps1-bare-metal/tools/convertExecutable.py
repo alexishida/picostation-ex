@@ -80,7 +80,7 @@ class Segment:
 			(self.flags & (ProgHeaderFlag.WRITE | ProgHeaderFlag.EXECUTE))
 
 class ELF:
-	def __init__(self, file: BinaryIO):
+	def __init__(self, file: BinaryIO, omit_zero_fill: bool = False):
 		# Parse the file header and perform some minimal validation.
 		file.seek(0)
 
@@ -139,12 +139,14 @@ class ELF:
 		) in parseStructsFromFile(file, PROG_HEADER_STRUCT, progHeaderCount):
 			if headerType != ProgHeaderType.LOAD:
 				continue
+			if omit_zero_fill and not fileLength:
+				continue
 
 			# Retrieve the segment and trim or pad it if necessary.
 			file.seek(fileOffset)
 			data: bytes = file.read(fileLength)
 
-			if length > len(data):
+			if not omit_zero_fill and length > len(data):
 				data = data.ljust(length, b"\0")
 			else:
 				data = data[0:length]
@@ -223,6 +225,11 @@ def createParser() -> ArgumentParser:
 			"Remove all ELF segments not marked writable nor executable from "
 			"the output file"
 	)
+	group.add_argument(
+		"--omit-zero-fill",
+		action = "store_true",
+		help = "Omit trailing ELF zero-fill when the startup code clears BSS"
+	)
 
 	group = parser.add_argument_group("File paths")
 	group.add_argument(
@@ -244,7 +251,7 @@ def main():
 
 	with args.input as file:
 		try:
-			elf: ELF = ELF(file)
+			elf: ELF = ELF(file, args.omit_zero_fill)
 		except RuntimeError as err:
 			parser.error(err.args[0])
 

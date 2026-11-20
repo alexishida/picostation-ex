@@ -13,16 +13,15 @@ enum {
     COMMAND_EXTENDED = 0x8,
     COMMAND_GET_COVER = 0x9,
     EXTENDED_GET_CONFIG = 3,
-    COVER_DELAY_FRAMES = 40,
+    COVER_DELAY_FRAMES = 12,
     RESPONSE_ATTEMPTS = 5
 };
 
 static uint32_t sectorBuffer[MENU_RAW_SECTOR_BYTES / sizeof(uint32_t)];
 static uint32_t coverBuffer[MENU_COVER_RGB15_BYTES / sizeof(uint32_t)];
+static uint32_t coverRaw[MENU_COVER_RGB15_PARTS * MENU_RAW_SECTOR_BYTES / sizeof(uint32_t)];
 static uint16_t coverIndex;
-static unsigned coverPart;
 static unsigned coverDelay;
-static unsigned coverAttempts;
 static unsigned coverWaitFrames;
 static bool coverRgb15;
 
@@ -140,11 +139,11 @@ void loadMenuColors(MenuColors *colors)
     sendMenuCommand(COMMAND_CLEAR, 0);
 }
 
-static void readCoverPart(void)
+static void startCoverRead(void)
 {
     coverWaitFrames = 0;
-    memset(sectorBuffer, 0, sizeof(sectorBuffer));
-    startCDROMRead(MENU_COVER_LBA + coverPart, sectorBuffer, 1, MENU_RAW_SECTOR_BYTES, true, false);
+    memset(coverRaw, 0, sizeof(coverRaw));
+    startCDROMRead(MENU_COVER_LBA, coverRaw, MENU_COVER_RGB15_PARTS, MENU_RAW_SECTOR_BYTES, true, false);
 }
 
 void resetMenuCover(void)
@@ -162,8 +161,10 @@ void resetMenuCover(void)
 bool updateMenuCover(uint16_t index, TextureInfo *texture)
 {
     const bool reading = coverState == COVER_READING;
-    // INT1 starts CD DMA. Its Pause command completes later with INT2.
-    if (reading && waitingForInt5 && (waitingForInt1 || waitingForInt2))
+    // One ReadN fetches every part. INT1 signals each sector, the last
+    // sector's Pause completes with INT2, and the final DMA drains after it.
+    if (reading && waitingForInt5 &&
+        (cdromReadDataNumSectors || (DMA_CHCR(DMA_CDROM) & DMA_CHCR_ENABLE) || waitingForInt2))
     {
         if (++coverWaitFrames < 180)
             return false;
@@ -171,8 +172,6 @@ bool updateMenuCover(uint16_t index, TextureInfo *texture)
         coverState = COVER_MISSING;
         return false;
     }
-    if (reading && (DMA_CHCR(DMA_CDROM) & DMA_CHCR_ENABLE))
-        return false;
 
     if (coverState == COVER_IDLE || index != coverIndex)
     {
@@ -187,55 +186,67 @@ bool updateMenuCover(uint16_t index, TextureInfo *texture)
     {
         if (coverDelay-- != 0)
             return false;
-        coverPart = 0;
-        coverAttempts = 0;
         sendMenuCommand(COMMAND_GET_COVER, index);
         coverState = COVER_READING;
-        readCoverPart();
+        startCoverRead();
         return false;
     }
 
     if (coverState != COVER_READING)
         return coverState == COVER_READY;
 
-    const uint8_t *data = (const uint8_t *)sectorBuffer + MENU_USER_DATA_OFFSET;
-    if (waitingForInt5 && !memcmp(data, "PART", 4) && readLE16(data + 4) == coverPart)
-    {
-        if (coverPart == 0)
-            coverRgb15 = !memcmp(data + MENU_COVER_FORMAT_OFFSET, "RGB5", 4);
-        const size_t partSize = coverRgb15 ? MENU_COVER_RGB15_PART_BYTES : MENU_COVER_PART_BYTES;
-        const size_t coverSize = coverRgb15 ? MENU_COVER_RGB15_BYTES : MENU_COVER_BYTES;
-        const unsigned partCount = coverRgb15 ? MENU_COVER_RGB15_PARTS : MENU_COVER_PARTS;
-        size_t offset = coverPart * partSize;
-        size_t remaining = coverSize - offset;
-        size_t length = remaining < partSize ? remaining : partSize;
-        memcpy((uint8_t *)coverBuffer + offset, data + MENU_COVER_DATA_OFFSET, length);
-        coverAttempts = 0;
-        if (++coverPart < partCount)
-        {
-            readCoverPart();
-            return false;
-        }
-
-        if (coverRgb15)
-            uploadTexture(texture, coverBuffer, 0, 256, MENU_COVER_WIDTH, MENU_COVER_HEIGHT);
-        else
-            uploadIndexedTexture(texture, (const uint8_t *)coverBuffer + MENU_COVER_PALETTE_BYTES, coverBuffer,
-                                 768, 0, 768, 128, MENU_COVER_WIDTH, MENU_COVER_HEIGHT, GP0_COLOR_8BPP);
-        // Both the artwork and its CLUT reuse the previous selection's VRAM.
-        waitForGP0Ready();
-        GPU_GP0 = gp0_flushCache();
-        coverState = COVER_READY;
-    }
-    else if (!memcmp(data, "DEAD", 4) || ++coverAttempts == RESPONSE_ATTEMPTS)
+    if (!waitingForInt5)
     {
         coverState = COVER_MISSING;
-    }
-    else
-    {
-        readCoverPart();
+        sendMenuCommand(COMMAND_CLEAR, 0);
         return false;
     }
+
+    const uint8_t *part0 = (const uint8_t *)coverRaw + MENU_USER_DATA_OFFSET;
+    if (!memcmp(part0, "DEAD", 4) || memcmp(part0, "PART", 4) || readLE16(part0 + 4) != 0)
+    {
+        coverState = COVER_MISSING;
+        sendMenuCommand(COMMAND_CLEAR, 0);
+        return false;
+    }
+
+    coverRgb15 = !memcmp(part0 + MENU_COVER_FORMAT_OFFSET, "RGB5", 4);
+    const size_t partSize = coverRgb15 ? MENU_COVER_RGB15_PART_BYTES : MENU_COVER_PART_BYTES;
+    const size_t coverSize = coverRgb15 ? MENU_COVER_RGB15_BYTES : MENU_COVER_BYTES;
+    const unsigned partCount = coverRgb15 ? MENU_COVER_RGB15_PARTS : MENU_COVER_PARTS;
+
+    bool complete = true;
+    for (unsigned part = 0; part < partCount; ++part)
+    {
+        const uint8_t *data =
+            (const uint8_t *)coverRaw + part * MENU_RAW_SECTOR_BYTES + MENU_USER_DATA_OFFSET;
+        if (memcmp(data, "PART", 4) || readLE16(data + 4) != part)
+        {
+            complete = false;
+            break;
+        }
+        const size_t offset = part * partSize;
+        const size_t remaining = coverSize - offset;
+        const size_t length = remaining < partSize ? remaining : partSize;
+        memcpy((uint8_t *)coverBuffer + offset, data + MENU_COVER_DATA_OFFSET, length);
+    }
+
+    if (!complete)
+    {
+        coverState = COVER_MISSING;
+        sendMenuCommand(COMMAND_CLEAR, 0);
+        return false;
+    }
+
+    if (coverRgb15)
+        uploadTexture(texture, coverBuffer, 0, 256, MENU_COVER_WIDTH, MENU_COVER_HEIGHT);
+    else
+        uploadIndexedTexture(texture, (const uint8_t *)coverBuffer + MENU_COVER_PALETTE_BYTES, coverBuffer,
+                             768, 0, 768, 128, MENU_COVER_WIDTH, MENU_COVER_HEIGHT, GP0_COLOR_8BPP);
+    // Both the artwork and its CLUT reuse the previous selection's VRAM.
+    waitForGP0Ready();
+    GPU_GP0 = gp0_flushCache();
+    coverState = COVER_READY;
 
     sendMenuCommand(COMMAND_CLEAR, 0);
     return coverState == COVER_READY;

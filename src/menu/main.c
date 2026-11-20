@@ -889,7 +889,8 @@ int main(int argc, const char **argv)
 
 			printString(
 				chain, &font, 40, 120,
-				"Original project by megavolt85");
+				"Original project by");
+			printString(chain, &font, 40, 136, "megavolt85");
 
 		}
 

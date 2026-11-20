@@ -7,6 +7,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "hardware/timer.h"
 #include "global.h"
 #include "ff.h"
 #include "listingBuilder.h"
@@ -45,6 +46,81 @@ static bool __time_critical_func(isVisibleEntry)(const FILINFO& entry)
            (length > 4 && strcasecmp(entry.fname + length - 4, ".cue") == 0);
 }
 
+static bool appendLog(const char* line)
+{
+    static FIL log;
+    if (sd_present && f_open(&log, "/erro.log", FA_OPEN_APPEND | FA_WRITE) == FR_OK)
+    {
+        UINT written;
+        const UINT size = strlen(line);
+        const FRESULT result = f_write(&log, line, size, &written);
+        const FRESULT closed = f_close(&log);
+        return result == FR_OK && written == size && closed == FR_OK;
+    }
+    return false;
+}
+
+#ifdef PICOSTATION_SD_BOOT_LOG
+void DirectoryListing::appendBootLog(const char* line)
+{
+    appendLog(line);
+}
+#endif
+
+namespace {
+struct ErrorEntry {
+    uint64_t firstUs;
+    uint64_t nextWrite;
+    unsigned count;
+    int detail;
+};
+ErrorEntry errors[static_cast<unsigned>(DirectoryListing::Error::Count)];
+unsigned pendingErrors;
+}
+
+// Called only by the sector reader on core 1. Keep disk I/O out of the LRCK wait.
+void DirectoryListing::recordError(Error error, int detail)
+{
+    auto& entry = errors[static_cast<unsigned>(error)];
+    if (!entry.count)
+    {
+        entry.firstUs = time_us_64();
+        entry.detail = detail;
+        ++pendingErrors;
+    }
+    if (entry.count < UINT32_MAX)
+        ++entry.count;
+}
+
+void __time_critical_func(DirectoryListing::flushErrors)()
+{
+    if (!pendingErrors || !sd_present)
+        return;
+
+    static constexpr const char* names[] = {
+        "montar_sd", "listar_diretorio", "preparar_imagem", "montar_imagem",
+        "ler_setor", "timeout_lrck", "ler_capa", "ler_config"
+    };
+    static_assert(sizeof(names) / sizeof(names[0]) == sizeof(errors) / sizeof(errors[0]));
+    const uint64_t now = time_us_64();
+    for (unsigned i = 0; i < sizeof(errors) / sizeof(errors[0]); ++i)
+    {
+        auto& entry = errors[i];
+        if (!entry.count || now < entry.nextWrite)
+            continue;
+        char line[128];
+        snprintf(line, sizeof(line), "ERRO ms=%llu evento=%s detalhe=%d ocorrencias=%u\r\n",
+                 (unsigned long long)(entry.firstUs / 1000), names[i], entry.detail, entry.count);
+        entry.nextWrite = now + 5000000;
+        if (appendLog(line))
+        {
+            entry.count = 0;
+            --pendingErrors;
+        }
+        break;
+    }
+}
+
 void __time_critical_func(DirectoryListing::init)()
 {
     sd_present = false;
@@ -54,6 +130,8 @@ void __time_critical_func(DirectoryListing::init)()
     
     FRESULT fr = f_mount(&s_fatFS, "", 1);
 	
+    if (fr != FR_OK)
+        recordError(Error::MountSD, fr);
 	if (FR_OK == fr)
 	{
 		sd_present = true;
@@ -123,6 +201,7 @@ void __time_critical_func(DirectoryListing::setListingError)(MenuListingStatus s
 {
     fileListing->clear();
     fileListing->addTerminator(status, 0);
+    recordError(Error::Listing, status);
 }
 
 bool __time_critical_func(DirectoryListing::getDirectoryEntries)(const uint32_t offset)
@@ -351,8 +430,10 @@ void __time_critical_func(DirectoryListing::openCover)(const uint32_t index)
         return;
     }
     memcpy(filePath + extensionOffset, ".cov", sizeof(".cov"));
-    coverRgb15 = f_open(&cover_fp, filePath, FA_READ) == FR_OK &&
-                 f_size(&cover_fp) == MENU_COVER_RGB15_BYTES;
+    const FRESULT result = f_open(&cover_fp, filePath, FA_READ);
+    if (result != FR_OK && result != FR_NO_FILE && result != FR_NO_PATH)
+        recordError(Error::Cover, index);
+    coverRgb15 = result == FR_OK && f_size(&cover_fp) == MENU_COVER_RGB15_BYTES;
 }
 
 uint16_t* __time_critical_func(DirectoryListing::readCover)(uint32_t part)
@@ -381,6 +462,7 @@ uint16_t* __time_critical_func(DirectoryListing::readCover)(uint32_t part)
             coverBuffer[2] = static_cast<uint16_t>(part);
             return coverBuffer;
         }
+        recordError(Error::Cover, part);
     }
 
     coverBuffer[0] = 'D' | 'E' << 8;
@@ -402,7 +484,9 @@ void __time_critical_func(DirectoryListing::openCfg)(void)
 	
 	DEBUG_PRINT("openCfg\n");
 
-	f_open(&cfg_fp, "config.ini", FA_READ);
+    const FRESULT result = f_open(&cfg_fp, "config.ini", FA_READ);
+    if (result != FR_OK && result != FR_NO_FILE && result != FR_NO_PATH)
+        recordError(Error::Config, result);
 }
 
 uint16_t* __time_critical_func(DirectoryListing::readCfg)(void)
@@ -416,6 +500,8 @@ uint16_t* __time_critical_func(DirectoryListing::readCfg)(void)
         f_read(&cfg_fp, &cfg_buf[MENU_CONFIG_DATA_OFFSET / sizeof(uint16_t)], MENU_CONFIG_MAX_BYTES,
                &bytesRead) != FR_OK)
 	{
+        if (cfg_fp.obj.fs)
+            recordError(Error::Config, f_error(&cfg_fp));
 		DEBUG_PRINT("readCfg: not found\n");
 		cfg_buf[0] = 'D' | 'E' << 8;
 		cfg_buf[1] = 'A' | 'D' << 8;

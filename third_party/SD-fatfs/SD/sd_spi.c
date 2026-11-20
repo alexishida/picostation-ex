@@ -539,7 +539,7 @@ int sd_write_blocks(uint32_t block, size_t count, const uint8_t *buf) {
         /* Write the end data token. */
         spi_write_byte(SPI_FILL_CHAR);
         do {
-            byte = spi_read_byte(SPI_FILL_CHAR);
+            byte = spi_read_byte();
             ++i;
         } while(byte != 0xFF && i < WRITE_RETRIES);
 
@@ -650,7 +650,17 @@ DRESULT __not_in_flash_func(disk_ioctl)(BYTE cmd,  /* Control code */
         }
         
         case CTRL_SYNC: {
+#if FF_FS_READONLY == 0
+            spi_set_cs(CS_ON);
+            unsigned retry = 0;
+            while (retry < WRITE_RETRIES && spi_read_byte() != 0xff)
+                ++retry;
+            spi_set_cs(CS_OFF);
+            spi_write_byte(SPI_FILL_CHAR);
+            return retry < WRITE_RETRIES ? RES_OK : RES_ERROR;
+#else
             return RES_OK;
+#endif
 		}
         
         default:

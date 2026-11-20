@@ -512,6 +512,15 @@ void __time_critical_func(picostation::DiscImage::unload)()
     m_nextReadRecovery = 0;
 }
 
+void picostation::DiscImage::takePreparedImage(DiscImage& prepared)
+{
+    unload();
+    *this = prepared;
+    // The active image now owns the open track files.
+    prepared.m_cueDisc.trackCount = 0;
+    prepared.unload();
+}
+
 void __time_critical_func(picostation::DiscImage::makeDummyCue)()
 {
     // Create a dummy cue disc with a single data track, as well as lead-in and lead-out tracks.

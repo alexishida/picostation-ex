@@ -23,7 +23,7 @@ foreach(setting IN ITEMS PICO_SDK_PATH PICO_TOOLCHAIN_PATH picotool_DIR)
     endif()
 endforeach()
 
-set(ode_args ${common_args} -DPICOSTATION_BUILD_MENU=ON)
+set(ode_args ${common_args} -DPICOSTATION_BUILD_MENU=ON -DPICOSTATION_SD_BOOT_LOG=OFF)
 foreach(setting IN ITEMS PICOSTATION_MIPS_TOOLCHAIN_PATH Python3_EXECUTABLE MKPSXISO_EXECUTABLE)
     if(DEFINED ${setting})
         list(APPEND ode_args "-D${setting}=${${setting}}")

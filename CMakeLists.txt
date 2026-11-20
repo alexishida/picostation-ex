@@ -89,12 +89,18 @@ endfunction()
 
 add_executable(${PROJECT_NAME})
 
+option(PICOSTATION_SD_BOOT_LOG "Write boot diagnostics to erro.log on the SD card" OFF)
+if(PICOSTATION_SD_BOOT_LOG)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE PICOSTATION_SD_BOOT_LOG=1)
+endif()
+
 target_compile_definitions(
     ${PROJECT_NAME} PUBLIC
     PICO_DEFAULT_UART=0
     PICO_DEFAULT_UART_TX_PIN=0
     PICO_DEFAULT_UART_RX_PIN=1
     PICO_XOSC_STARTUP_DELAY_MULTIPLIER=64
+    PICO_CORE1_STACK_SIZE=4096
     MAXINDEX=2
 )
 

@@ -32,6 +32,7 @@ void initCDROM(void);
 void issueCDROMCommand(uint8_t cmd, const uint8_t *arg, size_t argLength);
 
 void waitForINT1();
+void waitForINT2();
 void waitForINT3();
 
 

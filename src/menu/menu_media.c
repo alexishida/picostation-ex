@@ -5,6 +5,7 @@
 
 #include "menu_protocol.h"
 #include "ps1/cdrom.h"
+#include "ps1/registers.h"
 #include "psxproject/cdrom.h"
 
 enum {
@@ -22,6 +23,7 @@ static uint16_t coverIndex;
 static unsigned coverPart;
 static unsigned coverDelay;
 static unsigned coverAttempts;
+static unsigned coverWaitFrames;
 static bool coverRgb15;
 
 static enum {
@@ -140,6 +142,7 @@ void loadMenuColors(MenuColors *colors)
 
 static void readCoverPart(void)
 {
+    coverWaitFrames = 0;
     memset(sectorBuffer, 0, sizeof(sectorBuffer));
     startCDROMRead(MENU_COVER_LBA + coverPart, sectorBuffer, 1, MENU_RAW_SECTOR_BYTES, true, false);
 }
@@ -149,6 +152,8 @@ void resetMenuCover(void)
     if (coverState == COVER_READING)
     {
         waitForINT1();
+        if (waitingForInt5)
+            waitForINT2();
         sendMenuCommand(COMMAND_CLEAR, 0);
     }
     coverState = COVER_IDLE;
@@ -157,7 +162,16 @@ void resetMenuCover(void)
 bool updateMenuCover(uint16_t index, TextureInfo *texture)
 {
     const bool reading = coverState == COVER_READING;
-    if (reading && waitingForInt1 && waitingForInt5)
+    // INT1 starts CD DMA. Its Pause command completes later with INT2.
+    if (reading && waitingForInt5 && (waitingForInt1 || waitingForInt2))
+    {
+        if (++coverWaitFrames < 180)
+            return false;
+        resetMenuCover();
+        coverState = COVER_MISSING;
+        return false;
+    }
+    if (reading && (DMA_CHCR(DMA_CDROM) & DMA_CHCR_ENABLE))
         return false;
 
     if (coverState == COVER_IDLE || index != coverIndex)
@@ -185,7 +199,7 @@ bool updateMenuCover(uint16_t index, TextureInfo *texture)
         return coverState == COVER_READY;
 
     const uint8_t *data = (const uint8_t *)sectorBuffer + MENU_USER_DATA_OFFSET;
-    if (!memcmp(data, "PART", 4) && readLE16(data + 4) == coverPart)
+    if (waitingForInt5 && !memcmp(data, "PART", 4) && readLE16(data + 4) == coverPart)
     {
         if (coverPart == 0)
             coverRgb15 = !memcmp(data + MENU_COVER_FORMAT_OFFSET, "RGB5", 4);
@@ -208,6 +222,9 @@ bool updateMenuCover(uint16_t index, TextureInfo *texture)
         else
             uploadIndexedTexture(texture, (const uint8_t *)coverBuffer + MENU_COVER_PALETTE_BYTES, coverBuffer,
                                  768, 0, 768, 128, MENU_COVER_WIDTH, MENU_COVER_HEIGHT, GP0_COLOR_8BPP);
+        // Both the artwork and its CLUT reuse the previous selection's VRAM.
+        waitForGP0Ready();
+        GPU_GP0 = gp0_flushCache();
         coverState = COVER_READY;
     }
     else if (!memcmp(data, "DEAD", 4) || ++coverAttempts == RESPONSE_ATTEMPTS)

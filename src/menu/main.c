@@ -786,7 +786,7 @@ int main(int argc, const char **argv)
 				{
 					ptr = allocatePacket(chain, 5);
 					ptr[0] = gp0_texpage(cover.page, false, false);
-					ptr[1] = gp0_rectangle(true, true, true);
+					ptr[1] = gp0_rectangle(true, true, false);
 					ptr[2] = gp0_xy(185, 82);
 					ptr[3] = gp0_uv(cover.u, cover.v, cover.clut);
 					ptr[4] = gp0_xy(cover.width, cover.height);

@@ -35,6 +35,92 @@
 
 pseudoatomic<picostation::FileListingStates> needFileCheckAction;
 
+#ifdef PICOSTATION_SD_BOOT_LOG
+namespace {
+struct BootRun {
+    uint32_t startUs, endUs;
+    int firstLba, lastLba;
+    unsigned count;
+    uint8_t flags;
+};
+
+// Preserve the beginning and the most recent runs if the console retries for a long time.
+constexpr unsigned firstRuns = 24;
+constexpr unsigned recentRuns = 104;
+BootRun bootRuns[firstRuns + recentRuns];
+unsigned runCount;
+unsigned lbaTransfers[80];
+
+BootRun& bootRun(unsigned index)
+{
+    return bootRuns[index < firstRuns ? index : firstRuns + (index - firstRuns) % recentRuns];
+}
+
+void traceTransfer(uint32_t us, int lba, uint8_t flags)
+{
+    if (lba >= 0 && static_cast<unsigned>(lba) < std::size(lbaTransfers))
+        ++lbaTransfers[lba];
+    if (runCount)
+    {
+        BootRun& run = bootRun(runCount - 1);
+        const bool repeat = lba == run.lastLba && run.firstLba == run.lastLba;
+        const bool next = lba == run.lastLba + 1 &&
+                          run.lastLba - run.firstLba == static_cast<int>(run.count - 1);
+        if (flags == run.flags && (repeat || next) && us - run.endUs < 100000)
+        {
+            run.lastLba = lba;
+            run.endUs = us;
+            ++run.count;
+            return;
+        }
+    }
+    bootRun(runCount++) = {us, us, lba, lba, 1, flags};
+}
+
+void writeBootTrace()
+{
+    // Batch lines so FatFs does not reopen and sync the file for every run.
+    static char batch[1024];
+    size_t used = 0;
+    auto line = [&](const char* format, auto... values) {
+        char entry[112];
+        const int length = snprintf(entry, sizeof(entry), format, values...);
+        if (length <= 0 || static_cast<size_t>(length) >= sizeof(entry))
+            return;
+        if (used + length >= sizeof(batch))
+        {
+            batch[used] = 0;
+            picostation::DirectoryListing::appendBootLog(batch);
+            used = 0;
+        }
+        memcpy(batch + used, entry, length);
+        used += length;
+    };
+
+    line("DMA grupos=%u (flags: bit0=GFS bit1=SOCT bit2=SubQ pendente)\r\n", runCount);
+    line("%s", "grupo inicio_us fim_us primeiro_lba ultimo_lba transferencias flags\r\n");
+    for (unsigned i = 0; i < runCount; ++i)
+    {
+        if (i == firstRuns && runCount > std::size(bootRuns))
+        {
+            line("grupos intermediarios omitidos=%u\r\n", runCount - unsigned(std::size(bootRuns)));
+            i = runCount - recentRuns;
+        }
+        const BootRun& r = bootRun(i);
+        line("%u %u %u %d %d %u %u\r\n", i, unsigned(r.startUs), unsigned(r.endUs),
+             r.firstLba, r.lastLba, r.count, unsigned(r.flags));
+    }
+    line("%s", "Total DMA por LBA 0-79 (ausente=zero)\r\n");
+    for (unsigned i = 0; i < std::size(lbaTransfers); ++i)
+        if (lbaTransfers[i])
+            line("lba=%u dma=%u\r\n", i, lbaTransfers[i]);
+    line("%s", "FIM TRACE DMA\r\n");
+    batch[used] = 0;
+    picostation::DirectoryListing::appendBootLog(batch);
+}
+}  // namespace
+#endif
+
 static uint16_t *__time_critical_func(generateScramblingLUT)()
 {
     static uint16_t ScramblingLUT[1176] = {0};
@@ -144,9 +230,29 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
     g_discImage.makeDummyCue();
 	
     DirectoryListing::init();
+#ifdef PICOSTATION_SD_BOOT_LOG
+    DirectoryListing::appendBootLog("\r\nBOOT TRACE DMA v3 - SD montado\r\n");
+    const uint32_t bootStart = time_us_32();
+    bool bootReported = false;
+    unsigned transfers = 0;
+    unsigned syncTimeouts = 0;
+    unsigned resets = 0;
+    unsigned cancelledTransfers = 0;
+    unsigned configRequests = 0;
+    unsigned configBuilt = 0;
+    unsigned configValid = 0;
+    unsigned configLbaTransfers = 0;
+    unsigned listingRequests = 0;
+    unsigned listingSectorsBuilt = 0;
+    unsigned listingLbaTransfers = 0;
+    unsigned listingErrors = 0;
+    int lastBootLba = 0;
+    bool sentPvd = false;
+#endif
 
     while (true)
     {
+        DirectoryListing::flushErrors();
         // Sector could change during the loop, so we need to keep track of it
         currentSector = g_driveMechanics.getSector();
         
@@ -155,6 +261,32 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
         const ResetRequest reset = resetRequest.Load();
         const auto action = needFileCheckAction.Load();
         const bool softReturn = action == FileListingStates::RETURN_MENU;
+#ifdef PICOSTATION_SD_BOOT_LOG
+        if (reset != ResetRequest::None)
+            ++resets;
+        if (!bootReported && time_us_32() - bootStart >= 45000000)
+        {
+            char line[160];
+            snprintf(line, sizeof(line),
+                     "boot_ms=%u dma=%u ultimo_lba=%d pvd_lba16=%u lrck_timeout=%u comando=%u resets=%u\r\n",
+                     (unsigned)((time_us_32() - bootStart) / 1000), transfers, lastBootLba,
+                     (unsigned)sentPvd, syncTimeouts, (unsigned)action, resets);
+            DirectoryListing::appendBootLog(line);
+            snprintf(line, sizeof(line),
+                     "setor_drive=%d i2s=%u dma_ocupado=%u cancelados_posicao_ou_reset=%u\r\n",
+                     currentSector, unsigned(i2s_state.Load()), unsigned(dma_channel_is_busy(dmaChannel)),
+                     cancelledTransfers);
+            DirectoryListing::appendBootLog(line);
+            snprintf(line, sizeof(line), "lista_pedidos=%u lista_erros=%u lista_setores_montados=%u dma_lba100=%u\r\n",
+                     listingRequests, listingErrors, listingSectorsBuilt, listingLbaTransfers);
+            DirectoryListing::appendBootLog(line);
+            snprintf(line, sizeof(line), "cfg_pedidos=%u cfg_setores_montados=%u cfg_validos=%u dma_lba150=%u\r\n",
+                     configRequests, configBuilt, configValid, configLbaTransfers);
+            DirectoryListing::appendBootLog(line);
+            writeBootTrace();
+            bootReported = true;
+        }
+#endif
         if (reset != ResetRequest::None || softReturn)
         {
             reinitI2S();
@@ -195,12 +327,26 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                     else if (action == FileListingStates::GOTO_PARENT)
                         DirectoryListing::gotoParentDirectory();
 
+#ifdef PICOSTATION_SD_BOOT_LOG
+                    ++listingRequests;
+#endif
                     if (action == FileListingStates::GOTO_DIRECTORY &&
                         !DirectoryListing::gotoDirectory(g_fileArg.Load()))
+                    {
                         DirectoryListing::setListingError(MENU_LIST_OPEN_FAILED);
+#ifdef PICOSTATION_SD_BOOT_LOG
+                        ++listingErrors;
+#endif
+                    }
                     else
-                        DirectoryListing::getDirectoryEntries(
+                    {
+                        [[maybe_unused]] const bool listed = DirectoryListing::getDirectoryEntries(
                             action == FileListingStates::GET_NEXT_CONTENTS ? g_fileArg.Load() : 0);
+#ifdef PICOSTATION_SD_BOOT_LOG
+                        if (!listed)
+                            ++listingErrors;
+#endif
+                    }
 
                     if (lastSector == 4750)
                         lastSector = -1;
@@ -222,7 +368,10 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                     prepared = result == FR_OK;
                     preparedIndex = index;
                     if (!prepared)
+                    {
+                        DirectoryListing::recordError(DirectoryListing::Error::Prepare, result);
                         preparedImage.unload();
+                    }
                     memset(mountStatus, 0, sizeof(mountStatus));
                     memcpy(mountStatus, "MNT1", 4);
                     mountStatus[2] = index;
@@ -242,14 +391,14 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                     needFileCheckAction = FileListingStates::IDLE;
                     if (prepared && preparedIndex == index)
                     {
-                        std::swap(g_discImage, preparedImage);
-                        preparedImage.unload();
+                        g_discImage.takePreparedImage(preparedImage);
                         prepared = false;
                         c_sectorMax = preparedSectorMax;
                     }
                     else if (!DirectoryListing::getPath(index, filePath, &isDirectory) || isDirectory ||
                         g_discImage.load(filePath) != FR_OK)
                     {
+                        DirectoryListing::recordError(DirectoryListing::Error::MountImage, index);
                         break;
                     }
 
@@ -273,6 +422,9 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                     break;
 
                 case FileListingStates::GET_CFG:
+#ifdef PICOSTATION_SD_BOOT_LOG
+                    ++configRequests;
+#endif
                     DirectoryListing::openCfg();
                     needFileCheckAction = FileListingStates::PROCESS_FILES;
                     break;
@@ -338,6 +490,9 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
 				if (currentSector == 4750)
 				{
 					g_discImage.buildSector(currentSector - c_leadIn, pioSamples[readBuffer], picostation::DirectoryListing::getFileListingData(), cdScramblingLUT);
+#ifdef PICOSTATION_SD_BOOT_LOG
+                    ++listingSectorsBuilt;
+#endif
 					needFileCheckAction = picostation::FileListingStates::IDLE;
 				}
 				else if (currentSector >= c_leadIn + c_preGap + MENU_COVER_LBA &&
@@ -347,7 +502,13 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
 				}
 				else if (currentSector == c_leadIn + c_preGap + MENU_CONFIG_LBA)
 				{
-					g_discImage.buildSector(currentSector - c_leadIn, pioSamples[readBuffer], picostation::DirectoryListing::readCfg(), cdScramblingLUT);
+					auto* config = DirectoryListing::readCfg();
+#ifdef PICOSTATION_SD_BOOT_LOG
+                    ++configBuilt;
+                    if (memcmp(config, "CFG1", 4) == 0)
+                        ++configValid;
+#endif
+                    g_discImage.buildSector(currentSector - c_leadIn, pioSamples[readBuffer], config, cdScramblingLUT);
 				}
 				else
 				{
@@ -363,6 +524,8 @@ not_menu_request:
 				// Load the next sector
 				cacheable = g_discImage.readSector(pioSamples[readBuffer], currentSector - c_leadIn, dataLocation,
                                                   cdScramblingLUT);
+                if (!cacheable && dataLocation == DiscImage::DataLocation::SDCard)
+                    DirectoryListing::recordError(DirectoryListing::Error::SectorRead, currentSector - c_leadIn - c_preGap);
 #if DEBUG_I2S
 				endTime = time_us_64()-startTime;
 				
@@ -385,21 +548,57 @@ continue_transfer:
         {
 			if (currentSector >= 4503 && currentSector < c_sectorMax)
 			{
-                // Wait for the rising edge, allowing the main loop to handle a stopped clock.
-                const uint32_t syncStart = time_us_32();
-                while (gpio_get(Pin::LRCK) && time_us_32() - syncStart < 100)
-                    tight_loop_contents();
-                while (!gpio_get(Pin::LRCK) && time_us_32() - syncStart < 100)
-                    tight_loop_contents();
-                if (time_us_32() - syncStart >= 100 || !i2s_state.Load() ||
-                    resetRequest.Load() != ResetRequest::None ||
+                if (resetRequest.Load() != ResetRequest::None ||
                     g_driveMechanics.getSector() != currentSector)
+                {
+#ifdef PICOSTATION_SD_BOOT_LOG
+                    if (!bootReported)
+                        ++cancelledTransfers;
+#endif
                     continue;
+                }
 
                 activeDMABuffer = nextBuffer;
-                dma_channel_set_read_addr(dmaChannel, pioSamples[activeDMABuffer], true);
+                dma_channel_set_read_addr(dmaChannel, pioSamples[activeDMABuffer], false);
+
+                // Preload the DMA address so only the trigger follows the LRCK edge.
+                const uint32_t syncStart = time_us_32();
+                const auto waitForLRCK = [syncStart](bool level) {
+                    while (gpio_get(Pin::LRCK) != level)
+                    {
+                        if (time_us_32() - syncStart >= 100)
+                            return false;
+                    }
+                    return true;
+                };
+                if (!waitForLRCK(false) || !waitForLRCK(true))
+                {
+                    DirectoryListing::recordError(DirectoryListing::Error::LRCK, currentSector);
+#ifdef PICOSTATION_SD_BOOT_LOG
+                    if (!bootReported)
+                        ++syncTimeouts;
+#endif
+                    continue;
+                }
+                dma_channel_start(dmaChannel);
                 m_lastSectorTime = time_us_64();
                 m_sectorSending = lastSector;
+#ifdef PICOSTATION_SD_BOOT_LOG
+                if (!bootReported)
+                {
+                    ++transfers;
+                    lastBootLba = lastSector - c_leadIn - c_preGap;
+                    sentPvd |= lastBootLba == 16;
+                    if (menu_active && lastBootLba == MENU_CONFIG_LBA)
+                        ++configLbaTransfers;
+                    if (menu_active && lastBootLba == 100)
+                        ++listingLbaTransfers;
+                    const uint8_t flags = unsigned(mechCommand.getSens(SENS::GFS)) |
+                                          (unsigned(mechCommand.getSoct()) << 1) |
+                                          (unsigned(g_subqDelay.Load()) << 2);
+                    traceTransfer(time_us_32() - bootStart, lastBootLba, flags);
+                }
+#endif
 			}
 			else if (!g_subqDelay.Load())
 			{

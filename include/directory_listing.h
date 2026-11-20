@@ -9,7 +9,14 @@ class DirectoryListing {
   public:
     
 	static void init();
+#ifdef PICOSTATION_SD_BOOT_LOG
+    static void appendBootLog(const char* line);
+#endif
 	static void gotoRoot();
+    enum class Error { MountSD, Listing, Prepare, MountImage, SectorRead, LRCK, Cover, Config, Count };
+    static void recordError(Error error, int detail);
+    static void flushErrors();
+
     static bool gotoDirectory(const uint32_t index);
     static bool getPath(const uint32_t index, char* filePath, bool* isDirectory = nullptr);
 	static void gotoParentDirectory();

@@ -20,6 +20,12 @@ Na janela de jogo, Fast Boot e Regular Boot iniciam o disco; também é possíve
 
 Para jogos reconhecidos, o menu procura o executável de boot em `SYSTEM.CNF` e, quando identifica o Game ID, envia-o às duas portas de cartão de memória. Para `PSX.EXE` genérico, usa a data de criação do volume na tabela incorporada ao menu.
 
+## Registro de erros no SD
+
+Nos quatro firmwares ODE do release, o Pico cria ou acrescenta linhas a `/erro.log` apenas ao detectar uma falha. Cada linha informa o tempo desde o boot em milissegundos, a operação, um detalhe numérico e o número de ocorrências agrupadas. Erros repetidos da mesma operação são gravados no máximo uma vez a cada cinco segundos. O arquivo existente é preservado entre partidas.
+
+O registro cobre falhas de montagem do SD, listagem, preparação ou montagem de jogos, leitura de setores, erros de acesso às capas ou à configuração e timeout de LRCK. A ausência de capa ou de `config.ini` é normal. Uma falha enquanto o SD está indisponível só pode ser gravada se o cartão voltar a aceitar escrita durante a mesma partida.
+
 ## Capas
 
 Coloque um `.cov` ao lado da entrada usando o mesmo nome base: `Jogos/Exemplo.cue` usa `Jogos/Exemplo.cov`; a pasta `Jogos/RPG/` usa `Jogos/RPG.cov`. São aceitos arquivos de 128 × 128 pixels indexados de 8 bits precedidos por paleta de 512 bytes, ou RGB555 de 16 bits little-endian. Capas ausentes são opcionais e não impedem a navegação.

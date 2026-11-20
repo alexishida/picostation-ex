@@ -24,6 +24,7 @@ class DiscImage {
     FRESULT load(const TCHAR *targetCue, bool updateSectorLimit = true);
     int sectorLimit() const;
     void unload();
+    void takePreparedImage(DiscImage& prepared);
     SubQ::Data generateSubQ(const int sector);
     bool hasData() { return m_hasData; };
     void makeDummyCue();

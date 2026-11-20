@@ -34,3 +34,17 @@ O sistema SHALL distinguir cartão ausente (`2`), falha de leitura (`3`) e falha
 #### Scenario: Cartão reinserido
 - **WHEN** o cartão estava indisponível e o usuário pressiona X em Retry após reinseri-lo
 - **THEN** o firmware tenta montar o cartão e obter nova listagem, retornando conteúdo ou o estado de erro correspondente.
+
+### Requirement: Registro de falhas no cartão
+
+Os perfis ODE de release SHALL acrescentar registros a `/erro.log` somente quando o firmware detectar erros e houver um cartão gravável.
+
+#### Scenario: Operação normal
+
+- **WHEN** o console inicia, lista jogos e lê setores normalmente, inclusive sem os arquivos opcionais de capa e configuração
+- **THEN** o firmware preserva o conteúdo de um log existente e não cria o arquivo se estiver ausente.
+
+#### Scenario: Falha detectada
+
+- **WHEN** uma operação monitorada falha e o SD aceita escrita
+- **THEN** o firmware acrescenta o evento ao log, preserva os registros anteriores e agrupa ocorrências repetidas.

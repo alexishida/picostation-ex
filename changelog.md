@@ -2,35 +2,35 @@
 
 ## 1.0.0
 
-O PicoStation EX é um emulador de unidade óptica (ODE) para o PlayStation original que carrega imagens CUE/BIN de um cartão SD. Alex Ishida desenvolveu esta versão para atualizar o PicoStation original de megavolt85 e corrigir problemas no firmware e no menu.
+PicoStation EX is an optical drive emulator (ODE) for the original PlayStation that loads CUE/BIN images from an SD card. Alex Ishida developed this version to modernize megavolt85's original PicoStation and fix problems in the firmware and the menu.
 
-### Drive de CD
+### CD drive
 
-- O reset do console solicita a troca de imagem ao núcleo que lê o SD. Esse núcleo encerra a transferência antes de fechar o BIN ao retornar ao menu.
-- O cache de setores protege o buffer que o DMA ainda está transmitindo.
-- Uma falha transitória de leitura permite reabrir o BIN e repetir a leitura. Falhas persistentes têm um intervalo mínimo de 250 ms entre reaberturas.
-- O cálculo do fim do disco conta a pausa da última faixa uma única vez.
-- O `PREGAP` sintético de uma faixa de áudio retorna silêncio. Um `INDEX 00` gravado no BIN continua sendo lido do arquivo.
-- A busca reversa após atingir o fim do disco usa a zona correspondente à posição do laser emulado.
-- A regeneração de setores Mode 2 Form 1 recalcula o ECC mesmo quando o EDC já confere.
+- Console reset requests an image swap from the core that reads the SD card. That core stops the transfer before closing the BIN when returning to the menu.
+- The sector cache protects the buffer that DMA is still transmitting.
+- A transient read failure allows the BIN to be reopened and the read retried. Persistent failures have a minimum 250 ms interval between reopenings.
+- The end-of-disc calculation counts the last track's pause only once.
+- The synthetic `PREGAP` of an audio track returns silence. An `INDEX 00` written in the BIN is still read from the file.
+- The reverse seek after reaching the end of the disc uses the zone that matches the emulated laser position.
+- Mode 2 Form 1 sector regeneration recomputes the ECC even when the EDC already checks out.
 
-### Menu e cartão SD
+### Menu and SD card
 
-- O menu exibe a versão 1.0.0, o logo com EX em amarelo e os créditos de Alex Ishida e do projeto original de megavolt85.
-- Falhas ao abrir ou ler uma pasta exibem uma mensagem de erro no lugar da listagem anterior ou parcial.
-- O menu exibe `No SD Card` como estado. Pressionar X em `Retry` solicita outra listagem e permite montar o cartão após a inserção.
-- O menu mantém entradas CUE distintas, inclusive quando os nomes exibidos terminam em `.bin` e `.cue`.
-- O firmware verifica o CUE e os BINs antes de trocar a imagem ativa. A preparação exige setores raw de 2352 bytes e verifica o descritor ISO9660 quando a primeira faixa é de dados. Se a preparação falhar, o menu mantém a seleção para uma nova tentativa.
-- Fast Boot e Regular Boot estão disponíveis para jogos reconhecidos. Discos somente de áudio e discos sem assinatura PlayStation seguem a inicialização normal. A janela de boot permite alternar a correção EDC e o Bootsector Fix.
-- A leitura do Game ID reconhece a chave `BOOT` inteira em `SYSTEM.CNF` e extrai o nome do executável de caminhos com subpastas.
-- O menu aceita capas `.cov` de 128 × 128 em RGB555 ou com paleta indexada para jogos e pastas. As cores podem ser personalizadas pelo `config.ini` na raiz do cartão SD.
+- The menu shows version 1.0.0, the logo with EX in yellow, and credits to Alex Ishida and megavolt85's original project.
+- Failures to open or read a folder show an error message in place of the previous or partial listing.
+- The menu shows `No SD Card` as a state. Pressing X on `Retry` requests another listing and allows the card to be mounted after insertion.
+- The menu keeps distinct CUE entries, even when the displayed names end in `.bin` and `.cue`.
+- The firmware checks the CUE and the BINs before swapping the active image. Preparation requires 2352-byte raw sectors and checks the ISO9660 descriptor when the first track is data. If preparation fails, the menu keeps the selection for another attempt.
+- Fast Boot and Regular Boot are available for recognized games. Audio-only discs and discs without a PlayStation signature follow the normal boot. The boot window lets you toggle EDC correction and Bootsector Fix.
+- Game ID reading recognizes the entire `BOOT` key in `SYSTEM.CNF` and extracts the executable name from paths with subfolders.
+- The menu accepts 128 × 128 `.cov` covers in RGB555 or with an indexed palette for games and folders. Colors can be customized through `config.ini` at the SD card root.
 
-### Compilação e validação
+### Build and validation
 
-- O comando `cmake -P scripts/build-release.cmake` gera o pacote local em `release/` com cinco UF2. Os arquivos intermediários ficam em `build/`.
-- O pacote contém `picostationex_PU8.uf2`, `picostationex_PU8_OC.uf2`, `picostationex_PU18.uf2`, `picostationex_PU18_OC.uf2` e `pico_booty.uf2`. Os quatro perfis do ODE usam RP2040 e incorporam o menu compilado a partir dos fontes. Os perfis `_OC` usam um clock mais alto para o Mechacon. O Pico Booty empacota o menu para um segundo Pico na porta de expansão. [Perfis e clocks](docs/build.md)
-- O README, os guias em `docs/` e as especificações OpenSpec documentam o build, a arquitetura e o comportamento do menu.
-- O CMake aceita o Pico SDK instalado fora do projeto via `PICO_SDK_PATH` e usa a versão 2.1.1 como padrão quando o download pelo CMake é solicitado.
-- Os cinco UF2 do pacote local foram verificados. A versão, o logo e os créditos foram confirmados no menu embarcado nos quatro firmwares ODE.
-- Os testes locais cobriram pausas CUE, fim de disco, busca reversa, recuperação de leitura do SD, regeneração de ECC, listagem paginada e Game ID, incluindo os 100 casos da tabela legada.
-- A validação em PlayStation físico está pendente para reset durante leitura, transferência DMA, recuperação após falha do SD e reprodução de discos com várias faixas.
+- The `cmake -P scripts/build-release.cmake` command generates the local package in `release/` with five UF2 files. Intermediate files stay in `build/`.
+- The package contains `picostationex_PU8.uf2`, `picostationex_PU8_OC.uf2`, `picostationex_PU18.uf2`, `picostationex_PU18_OC.uf2`, and `pico_booty.uf2`. The four ODE profiles use the RP2040 and embed the menu built from source. The `_OC` profiles use a higher clock for the Mechacon. Pico Booty packages the menu for a second Pico on the expansion port. [Profiles and clocks](docs/build.md)
+- The README, the guides in `docs/`, and the OpenSpec specifications document the build, the architecture, and the menu behavior.
+- CMake accepts a Pico SDK installed outside the project through `PICO_SDK_PATH` and uses version 2.1.1 by default when the CMake download is requested.
+- The five UF2 files in the local package were verified. The version, the logo, and the credits were confirmed in the menu embedded in the four ODE firmwares.
+- Local tests covered CUE pauses, end of disc, reverse seek, SD read recovery, ECC regeneration, paginated listing, and Game ID, including the 100 cases from the legacy table.
+- Validation on physical PlayStation hardware is pending for reset during reads, DMA transfer, recovery after an SD failure, and playback of multi-track discs.

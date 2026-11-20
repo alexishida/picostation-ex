@@ -1,38 +1,38 @@
-# Cartão SD e menu
+# SD card and menu
 
-## Organização dos jogos
+## Organizing games
 
-O README do projeto recomenda cartão SD em exFAT. Organize os discos em arquivos `.cue` e `.bin`; os nomes e caminhos dos BINs devem corresponder às referências no CUE. As imagens devem usar setores raw de 2352 bytes. O menu lista diretórios e arquivos `.cue` visíveis, sem exibir a extensão; outros arquivos e entradas ocultas não aparecem.
+The project README recommends an exFAT SD card. Organize discs as `.cue` and `.bin` files; the BIN names and paths must match the references in the CUE. Images must use 2352-byte raw sectors. The menu lists visible directories and `.cue` files without showing the extension; other files and hidden entries do not appear.
 
-Antes da montagem, o firmware interpreta o CUE, abre as faixas e verifica se os arquivos são não vazios, não comprimidos e têm tamanho múltiplo de 2352 bytes. Quando a primeira faixa é de dados, verifica também o descritor ISO9660 no setor 16, em Mode 1 ou Mode 2. Essas verificações não garantem a integridade integral de um disco. A identificação PlayStation ocorre no menu após a montagem. Discos somente de áudio e discos sem assinatura PlayStation seguem a inicialização normal do console.
+Before mounting, the firmware parses the CUE, opens the tracks, and checks that the files are non-empty, uncompressed, and a multiple of 2352 bytes. When the first track is data, it also checks the ISO9660 descriptor at sector 16, in Mode 1 or Mode 2. These checks do not guarantee the full integrity of a disc. PlayStation identification happens in the menu after mounting. Audio-only discs and discs without a PlayStation signature follow the console's normal boot.
 
-## Controles e boot
+## Controls and boot
 
-| Controle | Ação |
+| Control | Action |
 | --- | --- |
-| Cima / baixo | Selecionar uma entrada |
-| L1 / R1 | Voltar / avançar página |
-| X | Abrir pasta, opções do jogo ou tentar novamente após erro |
-| Círculo | Fechar opções ou voltar à pasta anterior |
-| Select | Abrir créditos durante a navegação |
+| Up / down | Select an entry |
+| L1 / R1 | Previous / next page |
+| X | Open a folder, game options, or retry after an error |
+| Circle | Close options or return to the previous folder |
+| Select | Open credits while browsing |
 
-Na janela de jogo, Fast Boot e Regular Boot iniciam o disco; também é possível alternar EDC correction e Bootsector Fix. Cheats ainda não estão disponíveis e o clock é definido pelo firmware. Se a preparação falhar, o menu exibe um erro e mantém a seleção. Se o cartão estiver indisponível, selecione **Retry** com X para solicitar outra listagem e tentar montá-lo novamente.
+In the game window, Fast Boot and Regular Boot start the disc; you can also toggle EDC correction and Bootsector Fix. Cheats are not available yet, and the clock is set by the firmware. If preparation fails, the menu shows an error and keeps the selection. If the card is unavailable, select **Retry** with X to request another listing and try to mount it again.
 
-Para jogos reconhecidos, o menu procura o executável de boot em `SYSTEM.CNF` e, quando identifica o Game ID, envia-o às duas portas de cartão de memória. Para `PSX.EXE` genérico, usa a data de criação do volume na tabela incorporada ao menu.
+For recognized games, the menu looks up the boot executable in `SYSTEM.CNF` and, when it identifies the Game ID, sends it to both memory card ports. For a generic `PSX.EXE`, it uses the volume creation date in the table embedded in the menu.
 
-## Registro de erros no SD
+## Error log on the SD card
 
-Nos quatro firmwares ODE do release, o Pico cria ou acrescenta linhas a `/erro.log` apenas ao detectar uma falha. Cada linha informa o tempo desde o boot em milissegundos, a operação, um detalhe numérico e o número de ocorrências agrupadas. Erros repetidos da mesma operação são gravados no máximo uma vez a cada cinco segundos. O arquivo existente é preservado entre partidas.
+In the four ODE release firmwares, the Pico creates or appends lines to `/erro.log` only when it detects a failure. Each line reports the time since boot in milliseconds, the operation, a numeric detail, and the number of grouped occurrences. Repeated errors from the same operation are written at most once every five seconds. An existing file is preserved between sessions.
 
-O registro cobre falhas de montagem do SD, listagem, preparação ou montagem de jogos, leitura de setores, erros de acesso às capas ou à configuração e timeout de LRCK. A ausência de capa ou de `config.ini` é normal. Uma falha enquanto o SD está indisponível só pode ser gravada se o cartão voltar a aceitar escrita durante a mesma partida.
+The log covers SD mount failures, listing, game preparation or mounting, sector reads, cover or configuration access errors, and LRCK timeouts. A missing cover or a missing `config.ini` is normal. A failure while the SD card is unavailable can only be written if the card accepts writes again during the same session.
 
-## Capas
+## Covers
 
-Coloque um `.cov` ao lado da entrada usando o mesmo nome base: `Jogos/Exemplo.cue` usa `Jogos/Exemplo.cov`; a pasta `Jogos/RPG/` usa `Jogos/RPG.cov`. São aceitos arquivos de 128 × 128 pixels indexados de 8 bits precedidos por paleta de 512 bytes, ou RGB555 de 16 bits little-endian. Capas ausentes são opcionais e não impedem a navegação.
+Place a `.cov` file next to the entry using the same base name: `Games/Example.cue` uses `Games/Example.cov`; the `Games/RPG/` folder uses `Games/RPG.cov`. Accepted files are 8-bit indexed 128 × 128 pixel images preceded by a 512-byte palette, or 16-bit little-endian RGB555. Covers are optional, and missing ones do not prevent browsing.
 
-## Cores
+## Colors
 
-Crie `config.ini` na raiz do cartão com as chaves opcionais `background`, `frame` e `filelist`, usando cores RGB hexadecimais. O menu lê até 2048 bytes; sem arquivo usa as cores padrão.
+Create `config.ini` at the card root with the optional `background`, `frame`, and `filelist` keys, using hexadecimal RGB colors. The menu reads up to 2048 bytes; without the file, it uses the default colors.
 
 ```ini
 background = 404040
@@ -40,4 +40,4 @@ frame = 606060
 filelist = 303030
 ```
 
-Consulte [validação e solução de problemas](validacao.md) para cenários de teste e diagnóstico.
+See [validation and troubleshooting](validation.md) for test scenarios and diagnostics.

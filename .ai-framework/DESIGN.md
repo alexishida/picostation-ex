@@ -1,6 +1,6 @@
 # Design do menu do PicoStation EX
 
-O menu 1.0.0 roda no PlayStation e permite navegar pelo cartão SD e iniciar jogos. O firmware fornece a listagem, as capas e a configuração de cores. No Pico, o núcleo 0 trata a mecânica e os sinais do leitor, enquanto o núcleo 1 lê o SD, atende ao menu e envia setores por I²S com PIO e DMA. [Arquitetura e protocolo](../docs/arquitetura.md)
+O menu 1.0.0 roda no PlayStation e permite navegar pelo cartão SD e iniciar jogos. O firmware fornece a listagem, as capas e a configuração de cores. No Pico, o núcleo 0 trata a mecânica e os sinais do leitor, enquanto o núcleo 1 lê o SD, atende ao menu e envia setores por I²S com PIO e DMA. [Arquitetura e protocolo](../docs/architecture.md)
 
 ## Build e apresentação
 
@@ -43,4 +43,4 @@ A preparação exige arquivos de faixa acessíveis e não comprimidos, com taman
 
 Para jogos reconhecidos, o menu procura o caminho de boot em `SYSTEM.CNF` e envia o Game ID às duas portas de cartão de memória quando consegue identificá-lo. Quando o caminho aponta para um executável genérico `PSX.EXE`, o menu consulta a tabela de IDs pela data de criação do volume. [Código do Game ID](../src/menu/menu_game_id.c)
 
-Valide o firmware e o menu juntos no console com imagens válidas Mode 1 e Mode 2, disco somente de áudio, CUE com BIN ausente, BIN truncado e falha de leitura do cartão seguida de nova tentativa. [Cenários de validação](../docs/validacao.md)
+Valide o firmware e o menu juntos no console com imagens válidas Mode 1 e Mode 2, disco somente de áudio, CUE com BIN ausente, BIN truncado e falha de leitura do cartão seguida de nova tentativa. [Cenários de validação](../docs/validation.md)

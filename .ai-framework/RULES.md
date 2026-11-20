@@ -35,7 +35,7 @@ Os builds intermediários ficam em `build/`. Ao concluir, `release/` deve conter
 Itens inesperados em `release/` interrompem o empacotamento e são preservados. Os quatro perfis de ODE usam o RP2040, o pinout padrão e o clock do Mechacon em GP3. O Pico Booty usa um segundo RP2040 na porta de expansão.
 
 - Para alterações em código compartilhado ou no empacotamento, execute o script de release e confira os cinco arquivos finais.
-- Alterações de pinout, temporização, leitura do SD ou protocolo com o menu também pedem validação no PlayStation com a placa e a variante afetadas. Registre separadamente o que foi compilado, o que foi testado no console e o que ficou pendente. [Cenários de validação](../docs/validacao.md)
+- Alterações de pinout, temporização, leitura do SD ou protocolo com o menu também pedem validação no PlayStation com a placa e a variante afetadas. Registre separadamente o que foi compilado, o que foi testado no console e o que ficou pendente. [Cenários de validação](../docs/validation.md)
 - Para mudanças nas especificações, rode `openspec validate --all --strict`.
 
 ## Segurança das operações

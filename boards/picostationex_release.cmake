@@ -1,6 +1,6 @@
 include("${CMAKE_CURRENT_LIST_DIR}/picostation_pico1.cmake")
 
-# The RC5 profiles use the standard RP2040 wiring and a separate Mechacon clock.
+# The release profiles use the standard RP2040 wiring and a separate Mechacon clock.
 set(GPIO_MECHACON_CLK 3)
 set(PICOSTATION_SLED_STEP_US 29)
 set(PICOSTATION_SCEX_BAUD 250)

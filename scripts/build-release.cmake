@@ -2,6 +2,20 @@ cmake_minimum_required(VERSION 3.25)
 
 get_filename_component(project_dir "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 set(build_dir "${project_dir}/build")
+set(release_dir "${project_dir}/release")
+set(variants picostationex_PU8 picostationex_PU8_OC picostationex_PU18 picostationex_PU18_OC)
+set(release_files pico_booty.uf2)
+foreach(variant IN LISTS variants)
+    list(APPEND release_files "${variant}.uf2")
+endforeach()
+if(EXISTS "${release_dir}")
+    file(GLOB existing_files RELATIVE "${release_dir}" "${release_dir}/*" "${release_dir}/.*")
+    foreach(existing IN LISTS existing_files)
+        if(NOT existing IN_LIST release_files)
+            message(FATAL_ERROR "Unexpected item in release directory: ${release_dir}/${existing}. Move it elsewhere before generating the release.")
+        endif()
+    endforeach()
+endif()
 set(common_args -DCMAKE_BUILD_TYPE=Release)
 foreach(setting IN ITEMS PICO_SDK_PATH PICO_TOOLCHAIN_PATH picotool_DIR)
     if(DEFINED ${setting})
@@ -16,7 +30,6 @@ foreach(setting IN ITEMS PICOSTATION_MIPS_TOOLCHAIN_PATH Python3_EXECUTABLE MKPS
     endif()
 endforeach()
 
-set(variants picostationex_PU8 picostationex_PU8_OC picostationex_PU18 picostationex_PU18_OC)
 foreach(variant IN LISTS variants)
     execute_process(
         COMMAND "${CMAKE_COMMAND}" -S "${project_dir}" -B "${build_dir}/${variant}"
@@ -27,8 +40,6 @@ foreach(variant IN LISTS variants)
         COMMAND "${CMAKE_COMMAND}" --build "${build_dir}/${variant}" --config Release
         COMMAND_ERROR_IS_FATAL ANY
     )
-    file(COPY_FILE "${build_dir}/${variant}/${variant}.uf2" "${build_dir}/${variant}.uf2"
-         ONLY_IF_DIFFERENT)
 endforeach()
 
 find_program(PS1_PACKER_EXECUTABLE NAMES ps1-packer REQUIRED)
@@ -42,5 +53,10 @@ execute_process(
     COMMAND "${CMAKE_COMMAND}" --build "${build_dir}/pico_booty" --config Release
     COMMAND_ERROR_IS_FATAL ANY
 )
-file(COPY_FILE "${build_dir}/pico_booty/pico_booty.uf2" "${build_dir}/pico_booty.uf2"
+file(MAKE_DIRECTORY "${release_dir}")
+foreach(variant IN LISTS variants)
+    file(COPY_FILE "${build_dir}/${variant}/${variant}.uf2" "${release_dir}/${variant}.uf2"
+         ONLY_IF_DIFFERENT)
+endforeach()
+file(COPY_FILE "${build_dir}/pico_booty/pico_booty.uf2" "${release_dir}/pico_booty.uf2"
      ONLY_IF_DIFFERENT)

@@ -1,24 +1,37 @@
 # PicoStation EX
 
-O PicoStation EX é um emulador de unidade óptica (ODE) para o PlayStation original, baseado no [PicoStation de megavolt85](https://github.com/megavolt85/PicoStation). O firmware roda em Raspberry Pi Pico ou Pico 2, lê imagens de disco em cartão SD e apresenta um menu no console para navegar e iniciar jogos.
+Versão: **1.0.0**
+
+O PicoStation EX é um emulador de unidade óptica (ODE) para o PlayStation original, baseado no [PicoStation de megavolt85](https://github.com/megavolt85/PicoStation). O projeto foi criado para atualizar o PicoStation original e corrigir bugs. O firmware roda em Raspberry Pi Pico ou Pico 2, lê imagens de disco em cartão SD e apresenta um menu no console para navegar e iniciar jogos.
 
 ## Compatibilidade
 
-O projeto contempla as placas PU-8 (SCPH-100x) e PU-18 (SCPH-55xx). Escolha o firmware de acordo com a placa e a montagem. As variantes PicoStation e PicoStation Plus possuem mapas de pinos próprios em [boards/](boards/).
+O projeto contempla as placas PU-8 (SCPH-100x) e PU-18 (SCPH-55xx). Escolha o firmware de acordo com a placa e a montagem. Os quatro perfis de release do ODE usam RP2040 e o pinout padrão. Os perfis `_OC` usam um clock mais alto para o Mechacon.
 
-| Variante | Microcontrolador |
+| Arquivo de release | Montagem |
 | --- | --- |
-| `picostation_pico1` | RP2040 |
-| `picostation_pico2` | RP2350 |
-| `picostation_plus_pico1` | RP2040 |
-| `picostation_plus_pico2` | RP2350 |
+| `picostationex_PU8.uf2` | PU-8 |
+| `picostationex_PU8_OC.uf2` | PU-8 com overclock |
+| `picostationex_PU18.uf2` | PU-18 |
+| `picostationex_PU18_OC.uf2` | PU-18 com overclock |
+| `pico_booty.uf2` | Segundo RP2040 na porta de expansão |
 
-O pacote de release também oferece perfis RC5 para PU-8 e PU-18, com ou sem overclock, e um firmware Pico Booty para a porta de expansão. Consulte os detalhes de instalação e clocks em [compilação e releases](docs/build.md).
+Os perfis de release fornecem o clock do Mechacon pelo GP3. A instalação deve seguir o esquema da placa PU-8 ou PU-18 correspondente, com o clock original isolado quando GP3 for conectado ao Mechacon. Consulte os clocks e detalhes em [compilação e releases](docs/build.md).
+
+## Gerar o pacote de release
+
+Com as ferramentas descritas no [guia de build](docs/build.md) instaladas, execute na raiz do projeto:
+
+```sh
+cmake -P scripts/build-release.cmake
+```
+
+Os cinco arquivos finais ficam em `release/`; os arquivos intermediários ficam em `build/`. Se `release/` contiver algum outro arquivo, mova-o antes de gerar o pacote. O script preserva itens inesperados e interrompe a operação.
 
 ## Comece aqui
 
 1. Organize os arquivos `.cue` e `.bin` no cartão SD, recomendado em exFAT; as imagens devem usar setores raw de 2352 bytes.
-2. Escolha a variante correspondente ao hardware e compile o firmware seguindo o [guia de build](docs/build.md).
+2. Gere o pacote e escolha em `release/` o firmware correspondente à placa e à montagem.
 3. Use o [guia do menu](docs/menu.md) para navegar, iniciar discos e configurar capas e cores.
 
 ## Documentação
@@ -33,4 +46,4 @@ O pacote de release também oferece perfis RC5 para PU-8 e PU-18, com ou sem ove
 
 ## Licença e créditos
 
-O projeto é distribuído sob a [licença Apache 2.0](LICENSE). O firmware deriva do PicoStation de megavolt85. O pacote Pico Booty usa código do [fork de Nicolas Noble](https://github.com/nicolasnoble/pico_booty/tree/ea96b7fcd4196d666bc90340799bbacba50d3b31) do projeto de John Baumann; outras dependências mantêm seus próprios arquivos de licença em `third_party/`.
+PicoStation EX: Alex Ishida. O projeto original PicoStation é de megavolt85. O projeto é distribuído sob a [licença Apache 2.0](LICENSE). O pacote Pico Booty usa código do [fork de Nicolas Noble](https://github.com/nicolasnoble/pico_booty/tree/ea96b7fcd4196d666bc90340799bbacba50d3b31) do projeto de John Baumann; outras dependências mantêm seus próprios arquivos de licença em `third_party/`.

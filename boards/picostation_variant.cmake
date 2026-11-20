@@ -1,6 +1,6 @@
 set(PICOSTATION_PINOUT_FILE "${CMAKE_CURRENT_LIST_DIR}/${PICOSTATION_VARIANT}.cmake")
 if(PICOSTATION_VARIANT MATCHES "^picostationex_PU(8|18)(_OC)?$")
-    include("${CMAKE_CURRENT_LIST_DIR}/picostationex_rc5.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/picostationex_release.cmake")
 elseif(EXISTS "${PICOSTATION_PINOUT_FILE}")
     include(${PICOSTATION_PINOUT_FILE})
 else()

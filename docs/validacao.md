@@ -4,7 +4,7 @@
 
 Use um diretório de build por variante e confira a geração do UF2 correspondente. Para alterações em código compartilhado, as regras do projeto pedem compilação das quatro variantes básicas. Alterações em pinout, temporização, leitura do SD ou protocolo do menu também exigem validação no PlayStation com a placa e a variante afetadas. Registre modelo do console, revisão de placa, variante, cartão, imagem usada e resultado.
 
-A qualificação de release pode abranger os quatro perfis RC5 e o pacote Pico Booty descritos no [guia de build](build.md). A presença das especificações OpenSpec não demonstra que os testes foram executados.
+A qualificação de release pode abranger os quatro perfis PU-8 e PU-18 e o pacote Pico Booty descritos no [guia de build](build.md). A presença das especificações OpenSpec não demonstra que os testes foram executados.
 
 ## Cenários para testar no console
 

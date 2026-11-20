@@ -1,5 +1,17 @@
 # Compilação e releases
 
+## Ambiente local preparado
+
+Neste checkout Linux, as ferramentas foram instaladas em `env/` e `build/toolchain/`, diretórios ignorados pelo Git. Na raiz do projeto, ative o ambiente antes de compilar:
+
+```sh
+source env/picostation-build.sh
+cmake -S . -B build/local-picostation_pico2 -DPICOSTATION_VARIANT=picostation_pico2
+cmake --build build/local-picostation_pico2 --parallel 4
+```
+
+O script de ativação é local a este checkout e contém seu caminho absoluto. O `picotool` local foi compilado sem suporte USB: ele gera UF2, mas não detecta nem grava dispositivos. Em outro checkout ou máquina, prepare as ferramentas conforme as instruções abaixo.
+
 A compilação padrão usa CMake 3.25 ou superior, Pico SDK 2.1.1, toolchain GNU Arm `arm-none-eabi`, toolchain GNU MIPS (por exemplo, `mipsel-linux-gnu`), Python 3.10 ou superior e `mkpsxiso`. O CMake compila o menu PlayStation e incorpora a imagem gerada ao firmware.
 
 Com as ferramentas no `PATH`, execute na raiz do projeto:
@@ -21,7 +33,7 @@ Com o `ps1-packer` do [PCSX-Redux](https://github.com/pcsx-redux/pcsx-redux/tree
 cmake -P scripts/build-release.cmake
 ```
 
-O comando reúne os cinco arquivos na raiz de `build/`. Os quatro perfis do ODE usam **RP2040 e o pinout padrão**. O sufixo `_OC` seleciona um clock fixo mais alto para o Mechacon. Nos perfis abaixo, GP3 fornece esse clock e a instalação precisa seguir o esquema RC5 da revisão correspondente, com o clock original isolado quando GP3 for ligado ao Mechacon.
+O comando reúne somente os cinco arquivos finais em `release/`, na raiz do projeto. Os arquivos intermediários permanecem em `build/`. Se `release/` contiver outros arquivos, mova-os antes de executar o comando; o script não os apaga. Os quatro perfis do ODE usam **RP2040 e o pinout padrão**. O sufixo `_OC` seleciona um clock fixo mais alto para o Mechacon. Nos perfis abaixo, GP3 fornece esse clock e a instalação precisa seguir o esquema da placa PU-8 ou PU-18 correspondente, com o clock original isolado quando GP3 for ligado ao Mechacon.
 
 | Arquivo | Montagem | Clock em GP3 |
 | --- | --- | --- |

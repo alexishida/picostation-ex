@@ -76,6 +76,16 @@ O diff instrução a instrução do caminho de entrega de dados (`i2s.cpp`) cont
 
 **Build de teste** (Q corrigido + invalidação de I-cache + esta correção): `build/picostationex_PU18/picostationex_PU18.uf2`, SHA-256 `a669817a2b233261fdaadeb375890db0c87a909917dfa80a7bdb294e886e68e9`. **Resultado (21/11/2026): o MvC não abriu pelo Fast Boot — a restauração da publicação pré-trigger, embora fiel ao rc5, não bastou.** Restam como divergências do caminho, por ordem do diff: os abortos exclusivos do EX (`ClockTimeout` de 100 µs e `Stale` por geração, que descartam a transferência em voo onde o rc5 sempre dispara), a checagem de `enabled` por snapshot contra a leitura ao vivo do rc5, e a camada SDK/compilação nunca comparada. A janela de 9 setores persiste sem correspondência em literal de nenhum dos dois firmwares — sua medição no console (capturas físicas de SCOR/LRCK/DA16 ou o traço usbdebug dos comandos do Mechacon warm × cold) continua sendo o caminho para fechá-la.
 
+## Estado da caçada (21/11/2026)
+
+As três correções de código commitadas — MSF absoluto do Q sem o `+1` (`5561143`), invalidação da I-cache do rc5 (`7677213`) e publicação pré-trigger do par de setor (`65ec89c`) — são fiéis ao rc5 e cada uma eliminou uma divergência real comprovada, mas nenhuma fechou o jogo. O diff instrução a instrução do motor de entrega não encontrou mais nada de maior peso.
+
+Caminhos restantes, por custo:
+
+1. **Barato (último candidato de código com evidência forte):** os abortos exclusivos do EX. O rc5 **sempre dispara** o DMA (espera infinita pela borda, sem validação de geração); o EX desiste — `ClockTimeout` aos 100 µs e `Stale` descartam a transferência em voo. Uma variante que replique o "sempre dispara" (remover o timeout de LRCK, espera infinita como no rc5) se apoia na mesma evidência do diff. O risco: perder a serialização de seek/reset que a validação de geração do EX proporciona.
+2. **Caro:** medir a janela de 9 setores no console em vez de inferi-la — capturas físicas de SCOR/LRCK/DA16, ou o traço do `build/usbdebug` comparando os comandos do Mechacon do warm boot que trava contra o cold boot que funciona, na mesma imagem.
+3. **Circunscrito e utilizável hoje:** Regular Boot e cold boot funcionam; o problema é exclusivo do Fast Boot (warm boot), com o GT2 abrindo mancando e o MvC (executável de 1,3 MB) travando no rabicho da carga.
+
 ## Evidências dos experimentos anteriores
 
 Os números abaixo vêm de builds de investigação posteriores à tag. Os contadores registram os setores que o Pico tentou transmitir. Para saber quais bits o console recebeu, é necessária uma captura física.

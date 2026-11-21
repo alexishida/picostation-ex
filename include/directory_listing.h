@@ -16,6 +16,7 @@ class DirectoryListing {
     enum class Error { MountSD, Listing, Prepare, MountImage, SectorRead, LRCK, Cover, Config, DirectoryIO, MenuListTransfer, MenuListPage, MenuConfig, MenuCover, MenuPrepare, MenuDisc, Count };
     static void recordError(Error error, int detail);
     static void reportMenuError(unsigned code);
+    static void logDiscEvent(const char* event, const char* path = nullptr);
     static void beginMenuLog();
     static void flushErrors();
 

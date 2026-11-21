@@ -81,6 +81,14 @@ static bool appendLog(const char* line)
     return openSessionLog() && writeLog(line, FA_OPEN_APPEND);
 }
 
+void DirectoryListing::logDiscEvent(const char* event, const char* path)
+{
+    static char line[c_maxFilePathLength + 96];
+    snprintf(line, sizeof(line), "INFO ms=%llu evento=%s%s%s\r\n",
+             (unsigned long long)(time_us_64() / 1000), event, path ? " cue=" : "", path ? path : "");
+    appendLog(line);
+}
+
 #ifdef PICOSTATION_SD_BOOT_LOG
 void DirectoryListing::appendBootLog(const char* line)
 {

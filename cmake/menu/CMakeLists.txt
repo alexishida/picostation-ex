@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.25)
 # Internal MIPS build, invoked by the root firmware build.
 get_filename_component(PICOSTATION_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 set(CMAKE_TOOLCHAIN_FILE "${PICOSTATION_ROOT}/third_party/ps1-bare-metal/cmake/toolchain.cmake")
-project(picostation-menu VERSION 1.0.0 LANGUAGES C CXX ASM)
+project(picostation-menu VERSION 1.0.1 LANGUAGES C CXX ASM)
 
 # Set up compiler flags and initialize the Python environment used to run the
 # scripts in the tools directory.

@@ -42,7 +42,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(cmake/pico_sdk_import.cmake)
 
-project(${PROJECT_NAME} VERSION 1.0.0)
+project(${PROJECT_NAME} VERSION 1.0.1)
 
 pico_sdk_init()
 

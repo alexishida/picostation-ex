@@ -234,22 +234,31 @@ void picostation::I2S::enableDoor(bool enabled)
 {
     critical_section_enter_blocking(&transferLock);
     doorEnabled = enabled;
-    doorPending = false;
+    doorPending = 0;
+    critical_section_exit(&transferLock);
+}
+
+void picostation::I2S::notifyDoorOpened()
+{
+    critical_section_enter_blocking(&transferLock);
+    if (doorEnabled)
+        doorPending |= DoorOpened;
     critical_section_exit(&transferLock);
 }
 
 void picostation::I2S::notifyDoor()
 {
     critical_section_enter_blocking(&transferLock);
-    doorPending = doorEnabled;
+    if (doorEnabled)
+        doorPending |= DoorCycle;
     critical_section_exit(&transferLock);
 }
 
-bool picostation::I2S::takeDoorEvent()
+uint8_t picostation::I2S::takeDoorEvent()
 {
     critical_section_enter_blocking(&transferLock);
-    const bool pending = doorPending;
-    doorPending = false;
+    const uint8_t pending = doorPending;
+    doorPending = 0;
     critical_section_exit(&transferLock);
     return pending;
 }
@@ -292,6 +301,7 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
     static DiscImage previousImage;
     static bool prepared = false;
     static uint32_t preparedIndex;
+    static char preparedPath[c_maxFilePathLength + 1];
     static int preparedSectorMax;
     static uint16_t mountStatus[1176] = {};
 
@@ -475,11 +485,10 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                     preparedImage.unload();
                     prepared = false;
                     const uint32_t index = g_fileArg.Load();
-                    char path[c_maxFilePathLength + 1];
                     bool directory;
                     FRESULT result = FR_NO_FILE;
-                    if (DirectoryListing::getPath(index, path, &directory) && !directory)
-                        result = preparedImage.load(path, false);
+                    if (DirectoryListing::getPath(index, preparedPath, &directory) && !directory)
+                        result = preparedImage.load(preparedPath, false);
                     prepared = result == FR_OK;
                     if (prepared)
                         preparedSectorMax = preparedImage.sectorLimit();
@@ -502,7 +511,6 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
 				case picostation::FileListingStates::MOUNT_FILE:
 				{
 					//printf("Processing MOUNT_FILE\n");
-                    char filePath[c_maxFilePathLength + 1];
                     const uint32_t index = g_fileArg.Load();
                     bool isDirectory;
                     needFileCheckAction = FileListingStates::IDLE;
@@ -510,8 +518,8 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                     {
                         preparedImage.unload();
                         prepared = false;
-                        if (!DirectoryListing::getPath(index, filePath, &isDirectory) || isDirectory ||
-                            preparedImage.load(filePath, false) != FR_OK)
+                        if (!DirectoryListing::getPath(index, preparedPath, &isDirectory) || isDirectory ||
+                            preparedImage.load(preparedPath, false) != FR_OK)
                         {
                             DirectoryListing::recordError(DirectoryListing::Error::MountImage, index);
                             break;
@@ -527,6 +535,7 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
 					img_count = DirectoryListing::getDirectoryEntriesCount();
 					menu_active = false;
                     enableDoor(true);
+                    DirectoryListing::logDiscEvent("jogo_montado", preparedPath);
 					setReadOption(DiscImage::SkipBootSector, false);
 					setReadOption(DiscImage::SkipBootSectorFix, false);
 					mechCommand.resetBootSectorPattern();
@@ -555,8 +564,14 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
 					break;
 			}
 		}
-		else if (!menu_active && takeDoorEvent())
+		else if (const auto events = menu_active ? 0 : takeDoorEvent())
 		{
+            if (events & DoorOpened)
+                DirectoryListing::logDiscEvent("tampa_sinal_alto");
+            if (!(events & DoorCycle))
+                continue;
+            DirectoryListing::logDiscEvent("tampa_ciclo_confirmado");
+            bool mounted = false;
             for (uint32_t step = 1; step <= img_count; ++step)
             {
                 const uint32_t index = (loadedImageIndex + step) % img_count;
@@ -568,13 +583,18 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                     continue;
                 if (preparedImage.load(filePath, false) == FR_OK)
                 {
+                    const bool sameDisc = loadedImageIndex == index;
                     loadedImageIndex = index;
                     reinitI2S();
                     publishImage(preparedImage, preparedImage.sectorLimit(), false);
+                    mounted = true;
+                    DirectoryListing::logDiscEvent(sameDisc ? "mesmo_disco_remontado" : "disco_trocado", filePath);
                     break;
                 }
                 DirectoryListing::recordError(DirectoryListing::Error::MountImage, index);
             }
+            if (!mounted)
+                DirectoryListing::logDiscEvent("troca_sem_imagem_valida");
             continue;
 		}
 		

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.1
 
 ### Firmware and menu
 
@@ -9,6 +9,7 @@
 - Fix menu startup with the expanded font by transferring the complete texture to GPU VRAM. Display the first menu frame before reading configuration.
 - Support accented names in the menu and UTF-8 CUE track references when representable in CP850.
 - Improve completion handling for CD reads and support ISO directories spanning multiple sectors.
+- Log the mounted CUE path, lid signal and disc swap result. A PU-18 session recorded a swap from Final Fantasy IX Disc 1 to Disc 2.
 - Start a fresh `erro.log` for each menu session and record firmware and menu errors. Release builds include SD boot diagnostics and disable USB logging.
 
 ### Build and validation

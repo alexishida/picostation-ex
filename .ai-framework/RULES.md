@@ -1,6 +1,6 @@
 # Regras para IA no PicoStation EX
 
-Este documento é a referência oficial para trabalhar no repositório. O PicoStation EX 1.0.0 é um emulador de unidade óptica (ODE) para o PlayStation original, desenvolvido por Alex Ishida a partir do PicoStation de megavolt85 para atualizar o projeto e corrigir bugs. O firmware atende montagens em Raspberry Pi Pico e Pico 2. O [README](../README.md) descreve as placas PU-8 (SCPH-100x) e PU-18 (SCPH-55xx) e recomenda cartão SD em exFAT.
+Este documento é a referência oficial para trabalhar no repositório. O PicoStation EX 1.0.1 é um emulador de unidade óptica (ODE) para o PlayStation original, desenvolvido por Alex Ishida a partir do PicoStation de megavolt85 para atualizar o projeto e corrigir bugs. O firmware atende montagens em Raspberry Pi Pico e Pico 2. O [README](../README.md) descreve as placas PU-8 (SCPH-100x) e PU-18 (SCPH-55xx) e recomenda cartão SD em exFAT.
 
 Confira o código e o CMake para determinar o comportamento do checkout. Ao alterar um contrato do projeto, mantenha coerentes a [documentação](../docs/README.md) e as [especificações principais](../openspec/specs/). Os artefatos arquivados no OpenSpec registram o estado da época.
 

@@ -1,6 +1,6 @@
 # PicoStation EX
 
-Version: **1.0.0**
+Version: **1.0.1**
 
 PicoStation EX is an optical drive emulator (ODE) for the original PlayStation, based on [megavolt85's PicoStation](https://github.com/megavolt85/PicoStation). The project was created to modernize the original PicoStation and fix bugs. The firmware runs on a Raspberry Pi Pico or Pico 2, reads disc images from an SD card, and shows a console menu for browsing and launching games.
 

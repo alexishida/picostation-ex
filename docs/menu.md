@@ -22,7 +22,7 @@ In the game window, Fast Boot and Regular Boot start the disc; you can also togg
 
 For recognized games, the menu looks up the boot executable in `SYSTEM.CNF` and, when it identifies the Game ID, sends it to both memory card ports. For a generic `PSX.EXE`, it uses the volume creation date in the table embedded in the menu.
 
-The firmware accepts lid events while a game is mounted. Changing discs with the lid preserves the EDC and Bootsector Fix settings selected for the game.
+The firmware accepts lid events while a game is mounted. The session log records the mounted CUE path, the high lid signal, and a confirmed cycle after the signal returns low following at least 50 ms high. The result identifies the new CUE, a remount of the same disc, or a scan with no valid image. Changing discs with the lid preserves the EDC and Bootsector Fix settings selected for the game.
 
 ## Error log on the SD card
 

@@ -1,12 +1,12 @@
 # Design do menu do PicoStation EX
 
-O menu 1.0.0 roda no PlayStation e permite navegar pelo cartão SD e iniciar jogos. O firmware fornece a listagem, as capas e a configuração de cores. No Pico, o núcleo 0 trata a mecânica e os sinais do leitor, enquanto o núcleo 1 lê o SD, atende ao menu e envia setores por I²S com PIO e DMA. [Arquitetura e protocolo](../docs/architecture.md)
+O menu 1.0.1 roda no PlayStation e permite navegar pelo cartão SD e iniciar jogos. O firmware fornece a listagem, as capas e a configuração de cores. No Pico, o núcleo 0 trata a mecânica e os sinais do leitor, enquanto o núcleo 1 lê o SD, atende ao menu e envia setores por I²S com PIO e DMA. [Arquitetura e protocolo](../docs/architecture.md)
 
 ## Build e apresentação
 
 - O build padrão compila o menu em MIPS, gera o executável `picostation-menu.psexe` e cria a imagem de disco incorporada ao firmware Arm. O Pico Booty empacota o executável do menu gerado no build PU-8 para a porta de expansão. [CMake do menu](../cmake/menu/CMakeLists.txt) · [Guia de build](../docs/build.md)
 - O logo preserva a identidade visual do PicoStation e acrescenta **EX** em amarelo. O PNG usado pelo menu mede 128 × 20 pixels e o build o converte em uma textura indexada de 4 bits com paleta. O código de exibição usa essas dimensões. [Logo do menu](../assets/menu/images/picostationlogo.png) · [Código da interface](../src/menu/main.c)
-- A tela de créditos exibe `PicoStation EX 1.0.0`, `Alex Ishida` e `Original project by megavolt85`. Ao atualizar a versão, mantenha coerentes os créditos, o CMake do firmware e do menu e o README.
+- A tela de créditos exibe `PicoStation EX 1.0.1`, `Alex Ishida` e `Original project by megavolt85`. Ao atualizar a versão, mantenha coerentes os créditos, o CMake do firmware e do menu e o README.
 
 ## Navegação e estados
 

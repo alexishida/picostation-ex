@@ -999,7 +999,7 @@ int main(int argc, const char **argv)
 		{
 			printString(
 				chain, &font, 40, 40,
-				"PicoStation EX 1.0.0");
+				"PicoStation EX 1.0.1");
 			printString(
 				chain, &font, 40, 80,
 				"Alex Ishida");

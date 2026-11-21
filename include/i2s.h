@@ -24,6 +24,7 @@ class I2S {
     void publishDriveSector(int sector);
     int getDriveSector() { return transferSnapshot().sector; }
     void setReadOption(DiscImage::ReadOption option, bool enabled);
+    void notifyDoorOpened();
     void notifyDoor();
 
     int getSectorSending() { return m_sectorSending.Load(); }
@@ -52,9 +53,10 @@ class I2S {
     enum class TransferResult { Started, Stale, ClockTimeout };
     TransferResult startSectorDMA(const TransferState& expected);
     bool doorEnabled = false;
-    bool doorPending = false;
+    enum DoorEvent : uint8_t { DoorOpened = 1, DoorCycle = 2 };
+    uint8_t doorPending = 0;
     void enableDoor(bool enabled);
-    bool takeDoorEvent();
+    uint8_t takeDoorEvent();
 	
     pseudoatomic<int> m_sectorSending;
     pseudoatomic<uint64_t> m_lastSectorTime;

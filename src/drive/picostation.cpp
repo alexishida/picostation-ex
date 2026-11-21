@@ -144,6 +144,7 @@ static void __time_critical_func(interruptHandler)(unsigned int gpio, uint32_t e
             if (events & GPIO_IRQ_LEVEL_HIGH)
             {
                 lastLowEventDoor = time_us_64();
+                m_i2s.notifyDoorOpened();
                 // Disable low signal edge detection
                 gpio_set_irq_enabled(Pin::DOOR, GPIO_IRQ_LEVEL_HIGH, false);
                 // Enable high signal edge detection

@@ -6,7 +6,7 @@ The project README recommends an exFAT SD card. Organize discs as `.cue` and `.b
 
 The menu displays CP850 file names, including Portuguese accents, Å and Æ. A CP850 character without a font glyph appears as a replacement box. On exFAT, a name containing characters outside CP850 may be inaccessible. CUE sheets may use CP850 or UTF-8 with or without a BOM. For each `FILE` reference the firmware first tries the original bytes, then converts UTF-8 to CP850 if needed.
 
-Before mounting, the firmware parses the CUE, opens the tracks, and checks that the files are non-empty, uncompressed, and a multiple of 2352 bytes. When the first track is data, it also checks the ISO9660 descriptor at sector 16, in Mode 1 or Mode 2. These checks do not guarantee the full integrity of a disc. PlayStation identification happens in the menu after mounting. Audio-only discs and discs without a PlayStation signature follow the console's normal boot.
+Before mounting, the firmware parses the CUE, opens the tracks, and checks that the files are non-empty, uncompressed, and a multiple of 2352 bytes. When the first track is data, it also checks the ISO9660 descriptor at sector 16, in Mode 1 or Mode 2. These checks do not guarantee the full integrity of a disc; sector reads can still fail during playback. See [sector construction and recovery](architecture.md#sector-construction-and-recovery). PlayStation identification happens in the menu after mounting. Audio-only discs and discs without a PlayStation signature follow the console's normal boot.
 
 ## Controls and boot
 

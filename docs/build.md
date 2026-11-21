@@ -12,7 +12,7 @@ cmake --build build/local-picostation_pico2 --parallel 4
 
 The activation script is local to this checkout and contains its absolute path. The local `picotool` was built without USB support: it produces UF2 files but does not detect or flash devices. On another checkout or machine, set up the tools as described below.
 
-The standard build uses CMake 3.25 or newer, Pico SDK 2.1.1, the GNU Arm `arm-none-eabi` toolchain, the GNU MIPS toolchain (for example, `mipsel-linux-gnu`), Python 3.10 or newer, and `mkpsxiso`. CMake builds the PlayStation menu and embeds the resulting image in the firmware.
+The standard release build uses CMake 3.25 or newer, Pico SDK 2.1.1, the GNU Arm `arm-none-eabi` toolchain, the GNU MIPS toolchain (for example, `mipsel-linux-gnu`), Python 3.10 or newer, and `mkpsxiso`. CMake builds the PlayStation menu and embeds the resulting image in the firmware.
 
 With the tools on `PATH`, run this from the project root:
 

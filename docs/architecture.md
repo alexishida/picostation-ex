@@ -50,6 +50,8 @@ See [menu_protocol.h](../include/menu_protocol.h), [i2s.cpp](../src/hardware/i2s
 
 Core 0 receives console control signals through GPIO and PIO interrupts, decodes latched Mechacon commands, models sled movement and drive state, and schedules Q subchannel output. Core 1 owns the storage and streaming work: it reads or synthesizes sectors, prepares DMA buffers and handles menu requests. PIO and DMA deliver the sector stream to the console in synchronization with LRCK. The sector start timestamp is shared with the subchannel scheduler; its placement around the DMA trigger affects timing. Shared state and the disc-publication pause coordinate the cores. Functions marked `__time_critical_func` and interrupt handlers must be reviewed for latency as well as correctness.
 
+With SD boot diagnostics enabled, the firmware also records disc events and a 45-second DMA trace to the card for post-mortem analysis. Reading that trace is described in [validation.md](validation.md).
+
 ## From selection to playback
 
 1. The menu requests a directory page. `DirectoryListing` mounts FatFs when necessary, enumerates visible entries, and returns names and a terminator indicating whether another page or an error follows. Enumeration is bounded at 4096 visible entries. Opening a folder changes the current path; selecting a CUE starts preparation.
@@ -59,13 +61,21 @@ Core 0 receives console control signals through GPIO and PIO interrupts, decodes
 
 The exact state transitions and wire representation are implemented in [`i2s.cpp`](../src/hardware/i2s.cpp), [`directory_listing.cpp`](../src/storage/directory_listing.cpp), and [`menu_protocol.h`](../include/menu_protocol.h). The status sector is a protocol response, not a general-purpose file on the card.
 
+### Fast reboot and the kernel handoff
+
+Fast and regular boot differ in how the running menu returns control to the BIOS. `softReset()` disables interrupts and jumps to the full BIOS entry point, which reinitializes the machine as at power-on. `softFastReboot()` first checks the BIOS ROM signature and falls back to the full entry point on custom kernels, then copies a breakpoint stub to the COP0 breakpoint vector and a dummy shell to the shell load address. A data-write breakpoint on the shell load address makes the BIOS abort the shell relocation; the dummy shell returns immediately and the kernel proceeds to boot the disc instead.
+
+The fast path enters at the alternate BIOS entry point, in the middle of the boot code, and therefore skips the stage that initializes the kernel variables in low RAM and the cache control register. The menu replicates that initialization before configuring the breakpoint: it wipes `0x80000100..0x80000fff` and reconfigures `0xfffe0130` through its uncached kseg1 mirror. The wipe starts at `0x100`, so the breakpoint stub at `0x80000040` and the exception vector at `0x80000080` survive it. Without this step the kernel starts over leftovers of the previous boot and of the menu runtime, which can stall a warm boot while cold boot and regular boot succeed. [`system.c`](../src/menu/psxproject/system.c) and [`system.s`](../src/menu/psxproject/system.s) implement the sequence.
+
 ## Sector construction and recovery
 
-The image reader converts the requested sector to a position relative to the pregap, locates its track, and translates it to a byte offset in the corresponding 2352-byte-sector file. Synthetic pregaps and areas outside stored data are constructed instead of read. The embedded menu is served from `loaderImage`; when Bootsector Fix is enabled, the first five sectors of a data disc can also be substituted from that image. Data reads can regenerate EDC/ECC before scrambling; disabling correction follows the direct read path. Audio and data have different processing requirements.
+The image reader converts the requested sector to a position relative to the pregap, locates its track, and translates it to a byte offset in the corresponding 2352-byte-sector file. Synthetic pregaps and areas outside stored data are constructed instead of read. The embedded menu is served from `loaderImage`; when Bootsector Fix is enabled, the first five sectors of a data disc can also be substituted from that image. Audio and data have different processing requirements.
+
+With EDC correction enabled, data-track reads pass through `eccedc_generate` before scrambling: sync is rebuilt, the duplicated Mode 2 subheader is resynchronized, and Mode 1 and Mode 2 Form 1 sectors have EDC and P/Q parity recomputed — unconditionally for Form 1, because parity can be damaged even when the EDC matches. Mode 2 Form 2 sectors with submode exactly `0x20` keep a zeroed or standard (`0x3F13B0BE`) EDC tail untouched; only other Form 2 payloads have the EDC computed. Disabling correction follows the direct read path and serves the stored bytes unchanged, so images that differ in these byte ranges can behave differently between the two paths and toggling the correction is a valid diagnostic step.
 
 On eligible storage errors the reader attempts to reopen a track and retry, with recovery attempts rate-limited to 250 ms. If a sector still fails, it clears the output buffer and reports failure rather than replaying stale data. A successful initial CUE validation checks structure and a descriptor, not every sector or the correctness of the entire image. [`disc_image.cpp`](../src/storage/disc_image.cpp) and [`edc.c`](../src/disc/edc.c) define the actual transformations.
 
-Q subchannel generation derives track, index, and relative and absolute positions from the active disc. Core 0 schedules it relative to sector delivery, so an apparently valid sector stream can still fail on hardware if subcode timing is wrong. Pregap limitations and pending captures are documented in [validation.md](validation.md).
+Q subchannel generation derives track, index, and relative and absolute positions from the active disc. The absolute time in the program area is anchored at `sector - c_leadIn`, which equals `LBA + c_preGap`: LBA 0 is reported as MSF `00:02:00`, matching the Red Book program-area origin. An offset added to this value shifts every reported position and desynchronizes the subchannel lock the console uses during seeks and reads. Core 0 schedules Q output relative to sector delivery, so an apparently valid sector stream can still fail on hardware if subcode timing or content is wrong. Pregap limitations and pending captures are documented in [validation.md](validation.md).
 
 ## Menu and disc data transport
 

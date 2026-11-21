@@ -39,6 +39,7 @@ Console validation of these changes is pending for PU-8 and PU-18, including the
 | Configuration rejects the prebuilt menu | Check that `PICOSTATION_MENU_IMAGE` points to an existing file, not a directory. |
 | Card or listing unavailable | Check the card, connection, and format; try Retry after reinserting it. |
 | Game does not open | Check paths in the CUE, the BIN files, and 2352-byte raw sectors. Validation does not detect every form of truncation. |
+| Fast boot black screen while regular boot opens the game | Read the SD boot trace, compare against a cold boot of the same image on the same firmware, and see the 2026-11-21 section below. |
 | Cover or colors do not appear | Check the `.cov` name and location, the cover size and format, and `config.ini` at the root. |
 
 Recorded build and console results appear in the sections below. Specifications can be checked with `openspec validate --all --strict` when the tool is installed.
@@ -74,3 +75,22 @@ On PU-8 and PU-18, check a long reset during a software return from a subdirecto
 Host tests with simulated CD-ROM interrupts and DMA registers covered completion of a multi-sector read, delayed DMA completion, timeout and controller error. A two-sector ISO root fixture put `SYSTEM.CNF;1` after the first sector’s padding and exercised repeat lookups, a shorter root extent and a failed sector read. A separate host check verified matching XA subheaders across menu, pregap and menu sectors.
 
 Firmware state checks exercised a seek and a stop/restart between LRCK preparation and DMA commit, a pending reset, an option change with a populated cache, and lid events before and after mounting. On PU-8 and PU-18, measure the interval from LRCK to the DMA trigger, exercise seek and reset during playback, and verify that a lid event in the menu leaves the first selected disc mounted. Check boot-sector rereads after the boot pattern changes and Game ID lookup on a disc with a multi-sector root.
+
+### Fast boot black screen on PU-18 (2026-11-21)
+
+Marvel vs. Capcom reached the game through regular boot and through a console reset on v1.0.1, but fast boot ended on a black screen with no game audio, on the same PU-18 and card where the rc5 firmware fast-booted the same image. Gran Turismo 2 fast-booted on the same firmware, but slowly, with roughly 40 s of rereads.
+
+Two defects were identified by differential analysis. Both corrections were built and committed, and console validation was still pending when this was written.
+
+A byte-level comparison between the rc5 firmware and v1.0.1 found a single functional divergence in the firmware: the absolute MSF reported in the Q subchannel for the program area was computed as `(sector - c_leadIn) + 1` instead of the rc5's `sector - c_leadIn`, advancing every reported position by one sector. With the offset removed, the boot trace changed qualitatively — the console stopped looping forever on the license window and streamed the whole executable region — although it still did not produce a running game. Every other firmware component compared (PIO programs, zone tables, PWM clocks, sled step, core-0 loop, lead-in TOC, Q scheduling) was identical.
+
+The second defect was in the menu, outside that comparison. The decompiled rc5 menu executes one step the EX menu lacked: before jumping to the alternate BIOS entry point it wipes the kernel's low RAM and resets the cache control register, replicating the initialization the BIOS performs in the code both menus skip. It is ported as `_fastRebootKernelWipe` in `softFastReboot()`; see [architecture.md](architecture.md#fast-reboot-and-the-kernel-handoff) for the sequence.
+
+Method notes that generalize to similar regressions:
+
+- A boot trace records transmission attempts by the Pico, not reception by the console; only the console can confirm that a game executed.
+- The trace is written once per diagnostic session, 45 s after the menu starts, keeping the first 24 and the last 104 DMA groups plus a per-LBA histogram for LBA 0–79. Select the game immediately after the menu opens so the whole boot falls inside the window, and keep the console powered until the dump is written. Negative LBA values are the synthetic track-1 pregap.
+- The sharpest differential for a warm-boot failure is on the same firmware and image: reset the console at the black screen (cold boot, which works) and compare traces phase by phase, rather than comparing across firmwares or menus.
+- When a fix changes how far a boot progresses, negative results measured in the previous failure regime do not transfer. Toggles such as EDC correction and Bootsector Fix must be retested in the new regime before their earlier conclusions are trusted.
+- Images can differ inside the license window: sectors 12–15 are Mode 2 Form 2 with submode `0x20` on some discs, carrying either a zeroed or a standard `0x3F13B0BE` EDC tail, and the serving path preserves both. A disc that fails fast boot while another disc succeeds on the same firmware is a comparison point for the sector-serving path.
+- After any warm-boot change, validate fast boot of a disc that previously failed, fast boot of a healthy reference for time-to-title, and regular boot as a regression.

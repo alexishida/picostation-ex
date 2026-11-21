@@ -206,6 +206,75 @@ _fastRebootDummyShell:
 	nop
 	nop
 
+.section .text._fastRebootKernelWipe, "ax", @progbits
+.global _fastRebootKernelWipe
+.type _fastRebootKernelWipe, @function
+
+_fastRebootKernelWipe:
+	# Port of FUN_80019e44 from the rc5 reference menu (0x80019e44, called at
+	# 0x800179d4 right before the fast reboot). Both fast reboot paths skip the
+	# BIOS code between 0xbfc00000 and the alternate entry point 0xbfc00390;
+	# that code normally initializes the kernel variables in low RAM and the
+	# cache control register. The rc5 menu replicated that initialization by
+	# hand: it wiped 0x80000100..0x80000fff and configured 0xfffe0130 the same
+	# way the BIOS does at power-on, so the kernel comes up over a clean state
+	# instead of the leftovers of the previous boot and of the menu runtime.
+	# The wipe starts at 0x100, keeping the breakpoint stub at 0x80000040 and
+	# the exception vector at 0x80000080 intact.
+	#
+	# The routine runs from its uncached kseg1 mirror (the rc5 menu called
+	# 0xa0019e5c directly), because it manipulates the cache control register
+	# itself. It clobbers $v0, $v1, $t0..$t2, $k0 and $k1; the caller's return
+	# address is kept in $t9 for the duration.
+	la    $v0, .LkernelWipeBody   # kseg0 address of the body
+	li    $v1, 0x20000000
+	or    $v0, $v0, $v1           # kseg1 mirror
+	move  $t9, $ra
+	jr    $v0
+	nop
+
+.LkernelWipeBody:	# Save SR and mask every interrupt source off.
+	mfc0  $k0, SR
+	mtc0  $0, SR
+	nop
+
+	# Cache control register: enable the I-cache in tag test mode and clear
+	# the D-cache scratchpad bit, exactly like the BIOS boot code does.
+	lui   $t0, 0xfffe
+	lw    $k1, 0x130($t0)     # keep the original value
+	nop
+	li    $t1, ~0x80
+	and   $t1, $t1, $k1
+	li    $t2, 0x804
+	or    $t1, $t1, $t2
+	sw    $t1, 0x130($t0)
+	nop
+
+	# SR = 1: interrupt flag set with every source still masked.
+	li    $t0, 1
+	mtc0  $t0, SR
+	nop
+
+	# Wipe the kernel variables: 0x80000100..0x80000fff.
+	lui   $t0, 0x8000
+	ori   $t0, $t0, 0x100
+	ori   $t1, $0, 0x1000
+9:	sw    $0, 0($t0)
+	addiu $t0, 4
+	bne   $t0, $t1, 9b
+	nop
+
+	# Restore the cache control register and SR, then return.
+	mtc0  $0, SR
+	nop
+	lui   $t0, 0xfffe
+	sw    $k1, 0x130($t0)
+	nop
+	mtc0  $k0, SR
+	nop
+	jr    $t9
+	nop
+
 .set IO_BASE, 0xbf801000
 
 .set TIMER2_VALUE,  IO_BASE | 0x120

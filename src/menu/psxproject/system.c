@@ -156,12 +156,13 @@ void softFastReboot(void) {
 	__builtin_memcpy(BIOS_SHELL_LOAD_ADDR, &_fastRebootDummyShell,  16);
 	flushCache();
 
-	// The rc5 reference menu wiped the kernel's low RAM (0x80000100..0x80000fff)
-	// and reset the cache control register here, replicating the initialization
-	// the BIOS performs in the code between 0xbfc00000 and the alternate entry
-	// point this function jumps to. Without it, the kernel comes up over the
-	// previous boot's state and the warm boot can stall on a black screen.
-	// The wipe starts at 0x100, so the stubs above survive it.
+	// The rc5 reference menu invalidates the instruction cache here. Both fast
+	// reboot paths skip the BIOS code that initializes the caches, so the
+	// I-cache still holds lines from the previous boot and from this menu;
+	// executing the new kernel over stale lines produces garbage and can stall
+	// the warm boot on a black screen. The routine sweeps the I-cache tags
+	// through the cache control register, with the data cache isolated so the
+	// stores cannot reach RAM.
 	_fastRebootKernelWipe();
 
 	cop0_setReg(COP0_DCIC, 0);

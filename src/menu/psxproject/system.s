@@ -222,10 +222,10 @@ _fastRebootKernelWipe:
 	# register (0xfffe0130, "BCC"), program the I-cache into tag test mode
 	# ((BCC & ~0x80) | 0x804), set SR to 0x10000 — the R3000 isolate-cache
 	# bit — and sweep one full cache size (0x100..0xfff spans every line
-	# index) with zero stores. While the cache is isolated the stores are
-	# directed into the cache array: they do not reach RAM and do not pass
-	# through the TLB, which is why the raw kuseg addresses are safe. The
-	# BCC and SR are restored afterwards.
+	# index) with zero stores. In tag test mode the stores hit the I-cache
+	# tag array and invalidate every line; with the data cache isolated
+	# they cannot reach RAM, which is also why the raw kuseg addresses
+	# never pass through the TLB. The BCC and SR are restored afterwards.
 	#
 	# Like the rc5 menu (which jumped straight to the uncached kseg1 mirror
 	# 0xa0019e5c), the body executes from its kseg1 mirror because it

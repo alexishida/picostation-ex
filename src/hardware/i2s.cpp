@@ -702,6 +702,18 @@ continue_transfer:
         {
 			if (currentSector >= 4503 && currentSector < c_sectorMax.Load())
 			{
+				// The rc5 reference published the sector identity and its timing
+				// before touching the DMA. The core-0 subchannel scheduler gates
+				// on getSectorSending() == currentSector, so a freshly
+				// published pair keeps the Q subchannel advancing even while
+				// the LRCK edge wait or a command transition stalls the actual
+				// transfer. Publishing only after a successful trigger, as the
+				// refactor did, freezes the pair on the previously delivered
+				// sector during those windows and stops the Q subchannel from
+				// completing the tail of long reads.
+				m_sectorSending = lastSector;
+				m_lastSectorTime = time_us_64();
+
                 dma_channel_set_read_addr(dmaChannel, pioSamples[nextBuffer], false);
 
                 const auto result = startSectorDMA(state);
@@ -722,8 +734,6 @@ continue_transfer:
 #endif
                     continue;
                 }
-                m_lastSectorTime = time_us_64();
-                m_sectorSending = lastSector;
                 activeDMABuffer = nextBuffer;
 #ifdef PICOSTATION_SD_BOOT_LOG
                 if (!bootReported)

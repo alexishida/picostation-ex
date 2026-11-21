@@ -7,6 +7,7 @@
 - Coordinate disc image publication, sector limits, subcode and GFS across the two Pico cores, and protect sector transfers during seeks and resets.
 - Keep a directory listing available for repeated sector reads and correct the listing terminator size.
 - Fix menu startup with the expanded font by transferring the complete texture to GPU VRAM. Display the first menu frame before reading configuration.
+- Prevent flicker during game loading by drawing the progress window once and adding each new message without clearing the visible frame.
 - Support accented names in the menu and UTF-8 CUE track references when representable in CP850.
 - Improve completion handling for CD reads and support ISO directories spanning multiple sectors.
 - Log the mounted CUE path, lid signal and disc swap result. A PU-18 session recorded a swap from Final Fantasy IX Disc 1 to Disc 2.

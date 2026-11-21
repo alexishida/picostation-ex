@@ -498,10 +498,12 @@ static void drawBootOptions(DMAChain *chain, const TextureInfo *font, const Menu
 	drawMenuAction(chain, font, 82, 108, BUTTON_MASK_CIRCLE, "Back");
 }
 
+enum { BOOT_PROGRESS_LINES = 8 };
+
 static void drawBootProgress(DMAChain *chain, const TextureInfo *font, const MenuColors *colors,
                              const char *const *lines, unsigned count)
 {
-	const int height = 14 + 12 * count;
+	const int height = 14 + 12 * BOOT_PROGRESS_LINES;
 	drawMenuPanel(chain, colors, 16, 24, 190, height);
 	drawMenuRectangle(chain, colors->frame, 20, 28, 182, height - 8);
 	drawMenuRectangle(chain, colors->fileList, 21, 29, 180, height - 10);
@@ -509,12 +511,14 @@ static void drawBootProgress(DMAChain *chain, const TextureInfo *font, const Men
 		printStringClipped(chain, font, 25, 32 + 12 * i, lines[i], 198, NULL);
 }
 
-static void showBootProgress(DMAChain *chain, uint32_t *overlay, const TextureInfo *font,
-                             const MenuColors *colors, const char *const *lines, unsigned count)
+static void showBootProgress(DMAChain *chain, const TextureInfo *font, const char *const *lines,
+                             unsigned *shown, unsigned count)
 {
 	waitForDMADone();
-	chain->nextPacket = overlay;
-	drawBootProgress(chain, font, colors, lines, count);
+	chain->nextPacket = chain->data;
+	for (unsigned i = *shown; i < count; ++i)
+		printStringClipped(chain, font, 25, 32 + 12 * i, lines[i], 198, NULL);
+	*shown = count;
 	*chain->nextPacket = gp0_endTag(0);
 	waitForGP0Ready();
 	waitForVblank();
@@ -697,9 +701,9 @@ int main(int argc, const char **argv)
 		usingSecondFrame = !usingSecondFrame;
 
 		uint32_t *ptr;
-		uint32_t *bootOverlay = NULL;
+		unsigned shownLines = 2;
 		char mountLine[MAX_FILE_LENGTH + sizeof("Mount ")];
-		const char *bootProgress[8] = { "Please Wait Loading...", mountLine, "Update TOC", "Check CD",
+		const char *bootProgress[BOOT_PROGRESS_LINES] = { "Please Wait Loading...", mountLine, "Update TOC", "Check CD",
 		                                "load SYSTEM.CNF" };
 		
 
@@ -969,8 +973,7 @@ int main(int argc, const char **argv)
 				{
 					snprintf(mountLine, sizeof(mountLine), "Mount %s",
 					         file_manager_get_file_data(selectedindex)->filename);
-					bootOverlay = chain->nextPacket;
-					drawBootProgress(chain, &font, &colors, bootProgress, 2);
+					drawBootProgress(chain, &font, &colors, bootProgress, shownLines);
 				}
 				else if (bootMenu)
 				{
@@ -1080,14 +1083,14 @@ int main(int argc, const char **argv)
                 const bool audioOnly = status[MENU_MOUNT_FLAGS_OFFSET] & MENU_MOUNT_AUDIO_ONLY;
                 sendMenuCommand(COMMAND_MOUNT_FILE, index);
                 delayMicroseconds(400000);
-                showBootProgress(chain, bootOverlay, &font, &colors, bootProgress, 3);
+                showBootProgress(chain, &font, bootProgress, &shownLines, 3);
                 updateCDROM_TOC();
                 delayMicroseconds(400000);
                 sendMenuCommand(COMMAND_EXTENDED, (MENU_EXTENDED_SKIP_BOOTSECTOR << 1) | !bootsectorFix);
                 waitForINT3();
                 sendMenuCommand(COMMAND_EXTENDED, (MENU_EXTENDED_SKIP_EDC << 1) | !edcCorrection);
                 waitForINT3();
-                showBootProgress(chain, bootOverlay, &font, &colors, bootProgress, 4);
+                showBootProgress(chain, &font, bootProgress, &shownLines, 4);
 
                 if (audioOnly)
                     softReset();
@@ -1105,7 +1108,7 @@ int main(int argc, const char **argv)
                     continue;
                 }
 
-                showBootProgress(chain, bootOverlay, &font, &colors, bootProgress, 5);
+                showBootProgress(chain, &font, bootProgress, &shownLines, 5);
                 char gameId[20];
                 char bootPath[40];
                 unsigned progressCount = 5;
@@ -1117,11 +1120,11 @@ int main(int argc, const char **argv)
                     snprintf(gameIdLine, sizeof(gameIdLine), "Send ID %s", gameId);
                     bootProgress[progressCount++] = bootLine;
                     bootProgress[progressCount++] = gameIdLine;
-                    showBootProgress(chain, bootOverlay, &font, &colors, bootProgress, progressCount);
+                    showBootProgress(chain, &font, bootProgress, &shownLines, progressCount);
                     sendGameID(gameId, 3);
                 }
                 bootProgress[progressCount++] = "Load and execute";
-                showBootProgress(chain, bootOverlay, &font, &colors, bootProgress, progressCount);
+                showBootProgress(chain, &font, bootProgress, &shownLines, progressCount);
                 waitForDMADone();
                 if (currentCommand == MENU_COMMAND_MOUNT_FILE_FAST)
                     softFastReboot();

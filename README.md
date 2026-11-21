@@ -6,7 +6,7 @@ PicoStation EX is an optical drive emulator (ODE) for the original PlayStation, 
 
 ## Compatibility
 
-The project supports the PU-8 (SCPH-100x) and PU-18 (SCPH-55xx) boards. Choose the firmware that matches your board and build. The four ODE release profiles use the RP2040 and the standard pinout. The `_OC` profiles use a higher clock for the Mechacon.
+The project supports the PU-8 (SCPH-100x) and PU-18 (SCPH-55xx) boards. Check the revision printed on the motherboard before choosing a wiring diagram and firmware. Early and late PU-8 boards use different chipsets. [PlayStation chipset reference](https://psx-spx.consoledev.net/pinouts/) The four ODE release profiles use the RP2040 and the standard pinout. The `_OC` profiles use a higher clock for the Mechacon.
 
 | Release file | Build |
 | --- | --- |
@@ -46,4 +46,4 @@ The five final files are written to `release/`; intermediate files stay in `buil
 
 ## License and credits
 
-PicoStation EX: Alex Ishida. The original PicoStation project is by megavolt85. This project is distributed under the [Apache 2.0 license](LICENSE). The Pico Booty package uses code from [Nicolas Noble's fork](https://github.com/nicolasnoble/pico_booty/tree/ea96b7fcd4196d666bc90340799bbacba50d3b31) of John Baumann's project; other dependencies keep their own license files in `third_party/`.
+PicoStation EX: Alex Ishida. PicoStation EX builds on megavolt85’s fork of [paulocode’s original PicoStation](https://github.com/paulocode/picostation). This project is distributed under the [Apache 2.0 license](LICENSE). The Pico Booty package uses code from [Nicolas Noble's fork](https://github.com/nicolasnoble/pico_booty/tree/ea96b7fcd4196d666bc90340799bbacba50d3b31) of John Baumann's project; other dependencies keep their own license files in `third_party/`.

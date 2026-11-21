@@ -274,7 +274,11 @@ picostation::SubQ::Data __time_critical_func(picostation::DiscImage::generateSub
         sector_track = sector - m_cueDisc.tracks[m_currentLogicalTrack].indices[1] - c_leadIn - c_preGap;
         const MSF msf_track = sectorToMSF(sector_track);
 
-        const int sector_abs = (sector - c_leadIn) + 1;
+        // The rc5 reference reports the true disc address: LBA + c_preGap from
+        // the program-area start. The + 1 that the refactor added here advances
+        // every Q absolute MSF by one sector, which misaligns the subchannel
+        // position the console uses to lock reads during the warm boot.
+        const int sector_abs = sector - c_leadIn;
         const MSF msf_abs = sectorToMSF(sector_abs);
 
         subqdata.ctrladdr = (m_cueDisc.tracks[m_currentLogicalTrack].trackType == CueTrackType::TRACK_TYPE_DATA) ? 0x41 : 0x01;

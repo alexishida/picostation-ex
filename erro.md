@@ -65,6 +65,17 @@ O firmware tem um caso especial (`edc.c:168–178`) que **preserva** tail zerado
 
 Assinatura refinada do travamento, estável nos últimos builds: a carga do executável **trava no rabicho** — o kernel transmite o EXE inteiro, releio os últimos setores (659–667, na fronteira EXE→CAPMOV), não completa, e **reinicia o boot** (descida ao pregap + nova passada), em loop, sem som e sem vídeo. O comparativo pendente no mesmo build: o traço do **GT2 Fast Boot** (EXE de 307 setores, abre) e o do **cold boot do MvC** (o mesmo EXE de 643 setores, carrega com sucesso no mesmo firmware) — o comportamento dos rabichos nas duas cargas bem-sucedidas localiza o estágio. As tempestades em 208–216 permanecem como anomalia secundária: o disco verifica limpo nessa região e elas também aparecem na fase do menu.
 
+## Divergência no motor de entrega (21/11/2026)
+
+O diff instrução a instrução do caminho de entrega de dados (`i2s.cpp`) contra o binário rc5 — a camada que nunca tinha entrado nas comparações — encontrou a divergência funcional sobrevivente:
+
+- **O rc5 publica `{m_sectorSending, m_lastSectorTime}` ANTES de tocar o DMA** (0x20001d82 e 0x20001e1e, anteriores à espera de borda do LRCK em 0x20001e52). O EX só publicava **depois de um trigger bem-sucedido** (`i2s.cpp:725–726`).
+- O agendador do Q no núcleo 0 exige `getSectorSending() == currentSector` (`picostation.cpp:276`): com o par publicado só pós-trigger, qualquer abort (timeout de LRCK de 100 µs, `Stale` por geração durante transição de comando) congela o par no último setor **entregue** e o subcanal Q para de andar — justamente no rabicho de leituras longas. Toda janela grudenta dos traços tem exatamente 9 setores (12–20, 14–22, 208–216, 659–667, 13–21 e 1060–1068 no GT2, que **abre** após ~91 releituras): a unidade é o rabicho de um comando de leitura, e o orçamento de retry é quem decide entre o GT2 (abre mancando) e o MvC (desiste na fase do executável).
+- Demais achados do diff: a ordem endereço→borda→trigger é a mesma do rc5 (a mudança documentada na validação reproduzia o rc5); o rc5 não tem validação de geração nem timeout de LRCK (espera infinita, sempre dispara); o rc5 grava o timestamp em seção crítica (o EX usa `pseudoatomic`, equivalente); o agendamento do Q tem fórmula e literais idênticos (`now − lastSectorTime + 3333`).
+- **Correção (commit `65ec89c`):** restaurada a ordem do rc5 — `sectorSending`, timestamp, endereço de leitura, espera de borda, trigger — mantendo `activeDMABuffer` pós-trigger e toda a validação de geração do EX. Efeito colateral aceito (idêntico ao risco que o rc5 sempre correu): o par publicado pode brevemente descrever um setor cujo trigger abortou; o Q avança mesmo assim, como no rc5.
+
+**Build de teste** (Q corrigido + invalidação de I-cache + esta correção): `build/picostationex_PU18/picostationex_PU18.uf2`, SHA-256 `a669817a2b233261fdaadeb375890db0c87a909917dfa80a7bdb294e886e68e9`. Procedimento: Fast Boot do MvC (deve abrir; o traço deve mostrar o rabicho do executável sem as releituras de 9 setores), depois Regular Boot (regressão) e Fast Boot do GT2 (o tempo até o título deve cair dos ~40 s).
+
 ## Evidências dos experimentos anteriores
 
 Os números abaixo vêm de builds de investigação posteriores à tag. Os contadores registram os setores que o Pico tentou transmitir. Para saber quais bits o console recebeu, é necessária uma captura física.

@@ -211,66 +211,71 @@ _fastRebootDummyShell:
 .type _fastRebootKernelWipe, @function
 
 _fastRebootKernelWipe:
-	# Port of FUN_80019e44 from the rc5 reference menu (0x80019e44, called at
-	# 0x800179d4 right before the fast reboot). Both fast reboot paths skip the
-	# BIOS code between 0xbfc00000 and the alternate entry point 0xbfc00390;
-	# that code normally initializes the kernel variables in low RAM and the
-	# cache control register. The rc5 menu replicated that initialization by
-	# hand: it wiped 0x80000100..0x80000fff and configured 0xfffe0130 the same
-	# way the BIOS does at power-on, so the kernel comes up over a clean state
-	# instead of the leftovers of the previous boot and of the menu runtime.
-	# The wipe starts at 0x100, keeping the breakpoint stub at 0x80000040 and
-	# the exception vector at 0x80000080 intact.
+	# Faithful port of FUN_80019e44 from the rc5 reference menu (0x80019e44,
+	# called right before the fast reboot). The fast path enters the BIOS at
+	# the alternate entry point and skips the stage that initializes the
+	# caches; this routine replicates that initialization by hand, so stale
+	# cached data from the previous boot and from the menu runtime cannot
+	# leak into the warm boot.
 	#
-	# The routine runs from its uncached kseg1 mirror (the rc5 menu called
-	# 0xa0019e5c directly), because it manipulates the cache control register
-	# itself. It clobbers $v0, $v1, $t0..$t2, $k0 and $k1; the caller's return
-	# address is kept in $t9 for the duration.
-	la    $v0, .LkernelWipeBody   # kseg0 address of the body
-	li    $v1, 0x20000000
-	or    $v0, $v0, $v1           # kseg1 mirror
+	# The sequence is exactly the rc5 one: save SR and the cache control
+	# register (0xfffe0130, "BCC"), program the I-cache into tag test mode
+	# ((BCC & ~0x80) | 0x804), set SR to 0x10000 — the R3000 isolate-cache
+	# bit — and sweep one full cache size (0x100..0xfff spans every line
+	# index) with zero stores. While the cache is isolated the stores are
+	# directed into the cache array: they do not reach RAM and do not pass
+	# through the TLB, which is why the raw kuseg addresses are safe. The
+	# BCC and SR are restored afterwards.
+	#
+	# Like the rc5 menu (which jumped straight to the uncached kseg1 mirror
+	# 0xa0019e5c), the body executes from its kseg1 mirror because it
+	# manipulates the cache control register itself. It clobbers
+	# $a0..$a3, $t0, $t1 and $t9; the caller's return address is kept in
+	# $t9 for the duration.
+	la    $a0, .LkernelWipeBody   # kseg0 address of the body
+	li    $a1, 0x20000000
+	or    $a0, $a0, $a1           # kseg1 mirror
 	move  $t9, $ra
-	jr    $v0
+	jr    $a0
 	nop
 
-.LkernelWipeBody:	# Save SR and mask every interrupt source off.
-	mfc0  $k0, SR
+.LkernelWipeBody:
+	lui   $t0, 0xfffe             # cache control register page
+	mfc0  $a2, SR
+	lw    $a3, 0x130($t0)         # save BCC
 	mtc0  $0, SR
-	nop
-
-	# Cache control register: enable the I-cache in tag test mode and clear
-	# the D-cache scratchpad bit, exactly like the BIOS boot code does.
-	lui   $t0, 0xfffe
-	lw    $k1, 0x130($t0)     # keep the original value
-	nop
-	li    $t1, ~0x80
-	and   $t1, $t1, $k1
-	li    $t2, 0x804
-	or    $t1, $t1, $t2
-	sw    $t1, 0x130($t0)
-	nop
-
-	# SR = 1: interrupt flag set with every source still masked.
-	li    $t0, 1
+	li    $a1, -0x81              # ~0x80
+	and   $a1, $a1, $a3
+	li    $t1, 0x804
+	or    $a1, $a1, $t1
+	sw    $a1, 0x130($t0)         # BCC = (BCC & ~0x80) | 0x804
+	li    $t0, 0x10000            # SR = isolate-cache bit
 	mtc0  $t0, SR
-	nop
-
-	# Wipe the kernel variables: 0x80000100..0x80000fff.
-	lui   $t0, 0x8000
-	ori   $t0, $t0, 0x100
-	ori   $t1, $0, 0x1000
-9:	sw    $0, 0($t0)
-	addiu $t0, 4
-	bne   $t0, $t1, 9b
-	nop
-
-	# Restore the cache control register and SR, then return.
-	mtc0  $0, SR
+	ori   $a1, $0, 0xf00
+1:	sw    $0, 0x00($a1)
+	sw    $0, 0x10($a1)
+	sw    $0, 0x20($a1)
+	sw    $0, 0x30($a1)
+	sw    $0, 0x40($a1)
+	sw    $0, 0x50($a1)
+	sw    $0, 0x60($a1)
+	sw    $0, 0x70($a1)
+	sw    $0, 0x80($a1)
+	sw    $0, 0x90($a1)
+	sw    $0, 0xa0($a1)
+	sw    $0, 0xb0($a1)
+	sw    $0, 0xc0($a1)
+	sw    $0, 0xd0($a1)
+	sw    $0, 0xe0($a1)
+	sw    $0, 0xf0($a1)
+	bgtz  $a1, 1b
+	addiu $a1, $a1, -0x100
+	mtc0  $0, SR                  # SR = 0
 	nop
 	lui   $t0, 0xfffe
-	sw    $k1, 0x130($t0)
+	sw    $a3, 0x130($t0)         # restore BCC
 	nop
-	mtc0  $k0, SR
+	mtc0  $a2, SR                 # restore SR
 	nop
 	jr    $t9
 	nop

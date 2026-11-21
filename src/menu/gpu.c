@@ -68,19 +68,13 @@
 	 waitForDMADone();
 	 assert(!((uint32_t) data % 4));
  
-	 size_t length = (width * height) / 2;
-	 size_t chunkSize, numChunks;
- 
-	 if (length < DMA_MAX_CHUNK_SIZE) {
-		 chunkSize = length;
-		 numChunks = 1;
-	 } else {
-		 chunkSize = DMA_MAX_CHUNK_SIZE;
-		 numChunks = length / DMA_MAX_CHUNK_SIZE;
- 
-		 assert(!(length % DMA_MAX_CHUNK_SIZE));
-	 }
- 
+	 const size_t length = ((size_t)width * height + 1) / 2;
+	 size_t chunkSize = length < DMA_MAX_CHUNK_SIZE ? length : DMA_MAX_CHUNK_SIZE;
+	 // Every DMA block has the same length. Include the tail of the texture.
+	 while (length % chunkSize)
+		 chunkSize /= 2;
+	 const size_t numChunks = length / chunkSize;
+
 	 waitForGP0Ready();
 	 GPU_GP0 = gp0_vramWrite();
 	 GPU_GP0 = gp0_xy(x, y);

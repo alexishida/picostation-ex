@@ -43,7 +43,7 @@ The command gathers only the five final files into `release/`, at the project ro
 | `picostationex_PU18_OC.uf2` | PU-18 with overclock | 7.533 MHz |
 | `pico_booty.uf2` | Second RP2040 connected to the PlayStation expansion port | — |
 
-The four ODE firmwares embed the menu built from source. Pico Booty packages the same menu executable for the expansion port. Pico Booty's code comes from [Nicolas Noble's fork](https://github.com/nicolasnoble/pico_booty/tree/ea96b7fcd4196d666bc90340799bbacba50d3b31) of John Baumann's project.
+The release script builds the menu from the current checkout in `build/picostationex_PU8/menu` and embeds the resulting disc image in all four ODE firmwares. Pico Booty packages the executable from that same menu build for the expansion port. Pico Booty's code comes from [Nicolas Noble's fork](https://github.com/nicolasnoble/pico_booty/tree/ea96b7fcd4196d666bc90340799bbacba50d3b31) of John Baumann's project.
 
 To build a single ODE firmware, use the matching name from the table, without `.uf2`, in `-DPICOSTATION_VARIANT`.
 

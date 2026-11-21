@@ -13,8 +13,10 @@ class DirectoryListing {
     static void appendBootLog(const char* line);
 #endif
 	static void gotoRoot();
-    enum class Error { MountSD, Listing, Prepare, MountImage, SectorRead, LRCK, Cover, Config, Count };
+    enum class Error { MountSD, Listing, Prepare, MountImage, SectorRead, LRCK, Cover, Config, DirectoryIO, MenuListTransfer, MenuListPage, MenuConfig, MenuCover, MenuPrepare, MenuDisc, Count };
     static void recordError(Error error, int detail);
+    static void reportMenuError(unsigned code);
+    static void beginMenuLog();
     static void flushErrors();
 
     static bool gotoDirectory(const uint32_t index);

@@ -45,7 +45,7 @@ void picostation::ModChip::sendLicenseString(const int sector, MechCommand &mech
     const bool inWobbleGroove = (sector > 0) && (sector < c_leadIn);
     const bool isDataDisc = g_discImage.hasData();
     const bool soctDisabled = !mechCommand.getSoct();
-    const bool gfsSet = mechCommand.getSens(SENS::GFS);
+    const bool gfsSet = mechCommand.getGfsShared();
     const bool shouldActivateModchip = inWobbleGroove && gfsSet && soctDisabled && isDataDisc;
     const uint64_t timeElapsed = time_us_64() - m_modchipTimer;
 
@@ -56,7 +56,7 @@ void picostation::ModChip::sendLicenseString(const int sector, MechCommand &mech
             const int sector = g_driveMechanics.getSector();
             const bool inWobbleGroove = (sector > 0) && (sector < c_leadIn);
             const bool soctDisabled = !mechCommand.getSoct();
-            const bool gfsSet = mechCommand.getSens(SENS::GFS);
+            const bool gfsSet = mechCommand.getGfsShared();
 
             if (!soctDisabled || !gfsSet || !inWobbleGroove) {
                 return false;

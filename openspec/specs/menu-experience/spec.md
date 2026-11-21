@@ -16,6 +16,14 @@ O menu SHALL oferecer seleção com cima/baixo, páginas com L1/R1, abertura de 
 ### Requirement: Opções de inicialização
 O menu SHALL oferecer Fast Boot, Regular Boot, alternância da correção EDC e Bootsector Fix. SHALL informar `Cheats unavailable` para cheats e `Clock set by firmware` para overclock, sem executar cheats ou alterar o clock por essas opções.
 
+#### Scenario: Troca de disco pela tampa
+- **WHEN** o usuário troca o disco pela tampa durante um jogo
+- **THEN** o firmware mantém as opções de correção EDC e Bootsector Fix da sessão.
+
+#### Scenario: Tampa acionada no menu
+- **WHEN** o usuário aciona a tampa antes de montar um jogo
+- **THEN** a primeira montagem mantém o disco escolhido até um novo evento de tampa.
+
 #### Scenario: Inicialização de jogo reconhecido
 - **WHEN** um disco é montado e reconhecido como PlayStation
 - **THEN** Fast Boot usa reinicialização rápida e Regular Boot usa reinicialização normal.
@@ -26,6 +34,10 @@ O menu SHALL oferecer Fast Boot, Regular Boot, alternância da correção EDC e 
 
 ### Requirement: Identificação do jogo
 O menu SHALL procurar o caminho de boot em `SYSTEM.CNF` e enviar o Game ID identificado às duas portas de cartão de memória antes de reiniciar. Para `PSX.EXE` genérico, SHALL usar a data de criação do volume na tabela existente de identificação.
+
+#### Scenario: Diretório raiz de vários setores
+- **WHEN** o registro de `SYSTEM.CNF;1` está após o primeiro setor do diretório raiz da ISO
+- **THEN** o menu percorre a extensão do diretório e usa o arquivo para identificar o jogo.
 
 #### Scenario: Game ID encontrado
 - **WHEN** a identificação do disco reconhecido é bem-sucedida

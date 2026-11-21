@@ -136,15 +136,8 @@ void __time_critical_func(picostation::DiscImage::buildSector)(const int sector,
 	header[13] = toBCD(msf.ss);
 	header[14] = toBCD(msf.ff);
 	
-	if (pregap)
-	{
-		header[18] = header[22] = (Submode::Data);
-	}
-	else
-	{
-		header[18] = (Submode::Form);
-	}
-	
+    header[18] = header[22] = pregap ? Submode::Data : Submode::Form;
+
 	uint16_t *src = (uint16_t *) header;
 	
 	for (int i = 0; i < 12; i++)
@@ -367,15 +360,61 @@ static void parser_cb(struct CueParser *parser, struct CueScheduler *scheduler, 
     }
 }
 
+static bool convertUtf8TrackName(const char* name, char* output, size_t capacity)
+{
+    const auto* cursor = reinterpret_cast<const uint8_t*>(name);
+    while (*cursor)
+    {
+        if (capacity <= 1)
+            return false;
+        uint32_t codepoint = *cursor++;
+        if (codepoint >= 0x80)
+        {
+            // All characters representable in CP850 fit in three UTF-8 bytes.
+            if (codepoint < 0xC2 || codepoint >= 0xF0)
+                return false;
+            const bool threeBytes = codepoint >= 0xE0;
+            codepoint &= threeBytes ? 0x0F : 0x1F;
+            for (int i = 0; i < (threeBytes ? 2 : 1); ++i)
+            {
+                if ((*cursor & 0xC0) != 0x80)
+                    return false;
+                codepoint = (codepoint << 6) | (*cursor++ & 0x3F);
+            }
+            if (threeBytes && codepoint < 0x800)
+                return false;
+            codepoint = ff_uni2oem(codepoint, FF_CODE_PAGE);
+            if (!codepoint)
+                return false;
+        }
+        *output++ = static_cast<char>(codepoint);
+        --capacity;
+    }
+    *output = 0;
+    return true;
+}
+
 static struct CueFile *__time_critical_func(fileopen)(struct CueFile *file, struct CueScheduler *scheduler, const char *filename)
 {
     auto* context = static_cast<Context*>(scheduler->opaque);
     TCHAR fullpath[c_maxFilePathLength + 1];
-    int length = snprintf(fullpath, sizeof(fullpath), "%s/%s", context->parentPath, filename);
-    if (length < 0 || static_cast<size_t>(length) >= sizeof(fullpath))
-    {
+    const size_t prefix = strlen(context->parentPath) + 1;
+    if (prefix >= sizeof(fullpath))
         return nullptr;
+    memcpy(fullpath, context->parentPath, prefix - 1);
+    fullpath[prefix - 1] = '/';
+    char* trackName = fullpath + prefix;
+    const size_t capacity = sizeof(fullpath) - prefix;
+    // Preserve OEM references first. Only the FILE argument may need conversion.
+    const size_t length = strlen(filename);
+    if (length < capacity)
+    {
+        memcpy(trackName, filename, length + 1);
+        if (create_posix_file(file, fullpath, FA_READ))
+            return file;
     }
+    if (!convertUtf8TrackName(filename, trackName, capacity) || !strcmp(filename, trackName))
+        return nullptr;
     return create_posix_file(file, fullpath, FA_READ);
 }
 
@@ -512,16 +551,20 @@ void __time_critical_func(picostation::DiscImage::unload)()
     m_nextReadRecovery = 0;
 }
 
-void picostation::DiscImage::takePreparedImage(DiscImage& prepared)
+void picostation::DiscImage::replacePreparedImage(DiscImage& prepared, DiscImage& previous)
 {
-    unload();
-    *this = prepared;
-    // The active image now owns the open track files.
-    prepared.m_cueDisc.trackCount = 0;
-    prepared.unload();
+    previous = *this;
+    m_cueDisc = prepared.m_cueDisc;
+    m_hasData = prepared.m_hasData;
+    m_currentLogicalTrack = 0;
+    m_nextReadRecovery = 0;
+
+    // Clear transferred pointers in place. A temporary CueDisc exceeds the core 1 stack.
+    memset(&prepared.m_cueDisc, 0, sizeof(prepared.m_cueDisc));
+    prepared.m_hasData = false;
 }
 
-void __time_critical_func(picostation::DiscImage::makeDummyCue)()
+void __time_critical_func(picostation::DiscImage::makeDummyCue)(bool updateSectorLimit)
 {
     // Create a dummy cue disc with a single data track, as well as lead-in and lead-out tracks.
 
@@ -556,14 +599,15 @@ void __time_critical_func(picostation::DiscImage::makeDummyCue)()
                     m_cueDisc.tracks[i].indices[1] - m_cueDisc.tracks[i].indices[0]);
     }
     
-	c_sectorMax = 333000;  // 74:00:00
+    if (updateSectorLimit)
+        c_sectorMax = 333000;  // 74:00:00
 }
 
-bool __time_critical_func(picostation::DiscImage::readSector)(void *buffer, int sector, DataLocation location, const uint16_t *scramling)
+bool __time_critical_func(picostation::DiscImage::readSector)(void *buffer, int sector, DataLocation location, const uint16_t *scramling, uint8_t options)
 {
     if (location == DataLocation::SDCard)
     {
-        return readSectorSD(buffer, sector, scramling);
+        return readSectorSD(buffer, sector, scramling, options);
     }
     readSectorRAM(buffer, sector, scramling);
     return true;
@@ -584,10 +628,10 @@ void __time_critical_func(picostation::DiscImage::readSectorRAM)(void *buffer, c
     }
 }
 
-bool __time_critical_func(picostation::DiscImage::readSectorSD)(void *buffer, int sector, const uint16_t *scramling)
+bool __time_critical_func(picostation::DiscImage::readSectorSD)(void *buffer, int sector, const uint16_t *scramling, uint8_t options)
 {
     const int adjustedSector = sector - c_preGap;
-    if (!skip_bootsector && !skip_bootsector_fix && adjustedSector >= 0 && adjustedSector < 5 &&
+    if (!(options & (SkipBootSector | SkipBootSectorFix)) && adjustedSector >= 0 && adjustedSector < 5 &&
         m_cueDisc.tracks[1].trackType == TRACK_TYPE_DATA)
     {
         scramble_data((uint32_t *) buffer, (uint16_t *) &loaderImage[adjustedSector * c_cdSamplesBytes], scramling, 1176);
@@ -614,7 +658,7 @@ bool __time_critical_func(picostation::DiscImage::readSectorSD)(void *buffer, in
                 FRESULT result = f_lseek(file, offset);
                 if (result == FR_OK && f_tell(file) == offset)
                 {
-                    if (skip_edc || !isData)
+                    if ((options & SkipEdc) || !isData)
                     {
                         result = f_read_scramble(file, buffer, c_cdSamplesBytes, &bytesRead,
                                                  scramling, isData);

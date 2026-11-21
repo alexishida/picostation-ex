@@ -38,7 +38,6 @@ class listingBuilder {
         mValuesContainer[mSize + 2] = (count >> 8) & 0xff;
         mValuesContainer[mSize + 3] = count & 0xff;
         mSize += 4;
-        mSize += 2;
         return true;
     }
 

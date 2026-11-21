@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <csignal>
 
-int c_sectorMax = 333000;  // 74:00:00
+pseudoatomic<int> c_sectorMax;
 
 int main() {
     vreg_set_voltage(VREG_VOLTAGE_1_15);  // Increase the VREG voltage to 1.15V for the faster clock speed
@@ -17,6 +17,7 @@ int main() {
     set_sys_clock_khz(271200, true);
 
     initPseudoAtomics();
+    c_sectorMax = 333000;  // 74:00:00
     eccedc_init();
 
     picostation::initHW();

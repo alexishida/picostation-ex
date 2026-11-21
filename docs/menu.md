@@ -4,6 +4,8 @@
 
 The project README recommends an exFAT SD card. Organize discs as `.cue` and `.bin` files; the BIN names and paths must match the references in the CUE. Images must use 2352-byte raw sectors. The menu lists visible directories and `.cue` files without showing the extension; other files and hidden entries do not appear.
 
+The menu displays CP850 file names, including Portuguese accents, Å and Æ. A CP850 character without a font glyph appears as a replacement box. On exFAT, a name containing characters outside CP850 may be inaccessible. CUE sheets may use CP850 or UTF-8 with or without a BOM. For each `FILE` reference the firmware first tries the original bytes, then converts UTF-8 to CP850 if needed.
+
 Before mounting, the firmware parses the CUE, opens the tracks, and checks that the files are non-empty, uncompressed, and a multiple of 2352 bytes. When the first track is data, it also checks the ISO9660 descriptor at sector 16, in Mode 1 or Mode 2. These checks do not guarantee the full integrity of a disc. PlayStation identification happens in the menu after mounting. Audio-only discs and discs without a PlayStation signature follow the console's normal boot.
 
 ## Controls and boot
@@ -20,9 +22,13 @@ In the game window, Fast Boot and Regular Boot start the disc; you can also togg
 
 For recognized games, the menu looks up the boot executable in `SYSTEM.CNF` and, when it identifies the Game ID, sends it to both memory card ports. For a generic `PSX.EXE`, it uses the volume creation date in the table embedded in the menu.
 
+The firmware accepts lid events while a game is mounted. Changing discs with the lid preserves the EDC and Bootsector Fix settings selected for the game.
+
 ## Error log on the SD card
 
-In the four ODE release firmwares, the Pico creates or appends lines to `/erro.log` only when it detects a failure. Each line reports the time since boot in milliseconds, the operation, a numeric detail, and the number of grouped occurrences. Repeated errors from the same operation are written at most once every five seconds. An existing file is preserved between sessions.
+Each menu session starts a fresh `/erro.log` on the SD card. Navigation, folder retries, and game selection append to the same session. The release firmware writes its boot trace after 45 seconds and continues logging faults throughout the session. Error lines contain milliseconds since Pico startup, the operation, a numeric detail and an occurrence count. Repeated failures of one operation are grouped over five seconds.
+
+The PlayStation menu reports failed folder transfers, invalid listing responses, configuration and cover reads, failed preparation and disc checks through command `0xD`. The Pico writes these alongside its own errors.
 
 The log covers SD mount failures, listing, game preparation or mounting, sector reads, cover or configuration access errors, and LRCK timeouts. A missing cover or a missing `config.ini` is normal. A failure while the SD card is unavailable can only be written if the card accepts writes again during the same session.
 

@@ -37,12 +37,12 @@ O sistema SHALL distinguir cartão ausente (`2`), falha de leitura (`3`) e falha
 
 ### Requirement: Registro de falhas no cartão
 
-Os perfis ODE de release SHALL acrescentar registros a `/erro.log` somente quando o firmware detectar erros e houver um cartão gravável.
+Os perfis ODE de release SHALL iniciar um novo `/erro.log` a cada inicialização do menu e registrar as falhas detectadas pelo firmware e comunicadas pelo menu enquanto houver um cartão gravável.
 
 #### Scenario: Operação normal
 
 - **WHEN** o console inicia, lista jogos e lê setores normalmente, inclusive sem os arquivos opcionais de capa e configuração
-- **THEN** o firmware preserva o conteúdo de um log existente e não cria o arquivo se estiver ausente.
+- **THEN** o firmware cria ou trunca o arquivo uma vez para a nova sessão e preserva seus registros durante a navegação.
 
 #### Scenario: Falha detectada
 

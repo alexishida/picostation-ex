@@ -77,6 +77,9 @@ typedef struct
 	uint8_t x, y, width, height;
 } SpriteInfo;
 
+static const SpriteInfo gameIcon = {.x = 0, .y = 73, .width = 10, .height = 10};
+static const SpriteInfo folderIcon = {.x = 36, .y = 73, .width = 10, .height = 9};
+
 static const SpriteInfo fontSprites[] = {
 	{.x = 6, .y = 0, .width = 2, .height = 9},	   // !
 	{.x = 12, .y = 0, .width = 4, .height = 9},	   // "
@@ -173,29 +176,134 @@ static const SpriteInfo fontSprites[] = {
 	{.x = 78, .y = 45, .width = 4, .height = 9},   // }
 	{.x = 84, .y = 45, .width = 6, .height = 9},   // ~
 	{.x = 90, .y = 45, .width = 6, .height = 9},   // Invalid character
-	{.x = 0, .y = 54, .width = 6, .height = 9},	   //
-	{.x = 6, .y = 54, .width = 6, .height = 9},	   //
-	{.x = 12, .y = 54, .width = 4, .height = 9},   //
-	{.x = 18, .y = 54, .width = 4, .height = 9},   //
-	{.x = 24, .y = 54, .width = 6, .height = 9},   //
-	{.x = 30, .y = 54, .width = 6, .height = 9},   //
-	{.x = 36, .y = 54, .width = 6, .height = 9},   //
-	{.x = 42, .y = 54, .width = 6, .height = 9},   //
-	{.x = 0, .y = 63, .width = 7, .height = 9},	   //
-	{.x = 12, .y = 63, .width = 7, .height = 9},   //
-	{.x = 24, .y = 63, .width = 9, .height = 9},   //
-	{.x = 36, .y = 63, .width = 8, .height = 10},  //
-	{.x = 48, .y = 63, .width = 11, .height = 10}, //
-	{.x = 60, .y = 63, .width = 12, .height = 10}, //
-	{.x = 72, .y = 63, .width = 14, .height = 9},  //
-	{.x = 0, .y = 73, .width = 10, .height = 10},  //
-	{.x = 12, .y = 73, .width = 10, .height = 10}, //
-	{.x = 24, .y = 73, .width = 10, .height = 10}, //
-	{.x = 36, .y = 73, .width = 10, .height = 9},  //
-	{.x = 48, .y = 73, .width = 10, .height = 9},  //
-	{.x = 60, .y = 73, .width = 10, .height = 10},  //
-	{.x = 72, .y = 73, .width = 10, .height = 10},  //
-	{.x = 85, .y = 73, .width = 8, .height = 8}  //
+	{.x = 48, .y = 94, .width = 6, .height = 10},	   // Ç
+	{.x = 12, .y = 94, .width = 5, .height = 10},	   // ü
+	{.x = 18, .y = 94, .width = 6, .height = 10},	   // é
+	{.x = 6, .y = 84, .width = 6, .height = 10},	   // â
+	{.x = 12, .y = 84, .width = 6, .height = 10},	   // ä
+	{.x = 18, .y = 84, .width = 6, .height = 10},	   // à
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0x86 invalido
+	{.x = 30, .y = 84, .width = 6, .height = 10},	   // ç
+	{.x = 24, .y = 94, .width = 6, .height = 10},	   // ê
+	{.x = 30, .y = 94, .width = 6, .height = 10},	   // ë
+	{.x = 36, .y = 94, .width = 6, .height = 10},	   // è
+	{.x = 54, .y = 84, .width = 5, .height = 10},	   // ï
+	{.x = 42, .y = 84, .width = 4, .height = 10},	   // î
+	{.x = 48, .y = 84, .width = 4, .height = 10},	   // ì
+	{.x = 72, .y = 104, .width = 6, .height = 10},	   // Ä
+	{.x = 48, .y = 54, .width = 6, .height = 9},       // Å
+	{.x = 54, .y = 94, .width = 6, .height = 10},	   // É
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0x91 invalido
+	{.x = 60, .y = 54, .width = 9, .height = 9},       // Æ
+	{.x = 66, .y = 84, .width = 6, .height = 10},	   // ô
+	{.x = 78, .y = 84, .width = 6, .height = 10},	   // ö
+	{.x = 72, .y = 84, .width = 6, .height = 10},	   // ò
+	{.x = 0, .y = 94, .width = 5, .height = 10},	   // û
+	{.x = 6, .y = 94, .width = 5, .height = 10},	   // ù
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0x98 invalido
+	{.x = 18, .y = 104, .width = 6, .height = 10},	   // Ö
+	{.x = 42, .y = 104, .width = 6, .height = 10},	   // Ü
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0x9B invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0x9C invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0x9D invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0x9E invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0x9F invalido
+	{.x = 0, .y = 84, .width = 6, .height = 10},	   // á
+	{.x = 36, .y = 84, .width = 4, .height = 10},	   // í
+	{.x = 60, .y = 84, .width = 6, .height = 10},	   // ó
+	{.x = 90, .y = 84, .width = 5, .height = 10},	   // ú
+	{.x = 42, .y = 94, .width = 5, .height = 10},	   // ñ
+	{.x = 78, .y = 104, .width = 6, .height = 10},	   // Ñ
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xA6 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xA7 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xA8 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xA9 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xAA invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xAB invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xAC invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xAD invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xAE invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xAF invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xB0 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xB1 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xB2 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xB3 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xB4 invalido
+	{.x = 48, .y = 104, .width = 6, .height = 10},	   // Á
+	{.x = 54, .y = 104, .width = 6, .height = 10},	   // Â
+	{.x = 60, .y = 104, .width = 6, .height = 10},	   // À
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xB8 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xB9 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xBA invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xBB invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xBC invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xBD invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xBE invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xBF invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xC0 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xC1 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xC2 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xC3 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xC4 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xC5 invalido
+	{.x = 24, .y = 84, .width = 6, .height = 10},	   // ã
+	{.x = 66, .y = 104, .width = 6, .height = 10},	   // Ã
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xC8 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xC9 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xCA invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xCB invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xCC invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xCD invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xCE invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xCF invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xD0 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xD1 invalido
+	{.x = 60, .y = 94, .width = 6, .height = 10},	   // Ê
+	{.x = 66, .y = 94, .width = 6, .height = 10},	   // Ë
+	{.x = 72, .y = 94, .width = 6, .height = 10},	   // È
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xD5 invalido
+	{.x = 78, .y = 94, .width = 4, .height = 10},	   // Í
+	{.x = 84, .y = 94, .width = 4, .height = 10},	   // Î
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xD8 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xD9 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xDA invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xDB invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xDC invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xDD invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xDE invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xDF invalido
+	{.x = 90, .y = 94, .width = 6, .height = 10},	   // Ó
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xE1 invalido
+	{.x = 0, .y = 104, .width = 6, .height = 10},	   // Ô
+	{.x = 6, .y = 104, .width = 6, .height = 10},	   // Ò
+	{.x = 84, .y = 84, .width = 6, .height = 10},	   // õ
+	{.x = 12, .y = 104, .width = 6, .height = 10},	   // Õ
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xE6 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xE7 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xE8 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xE9 invalido
+	{.x = 24, .y = 104, .width = 6, .height = 10},	   // Ú
+	{.x = 30, .y = 104, .width = 6, .height = 10},	   // Û
+	{.x = 36, .y = 104, .width = 6, .height = 10},	   // Ù
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xED invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xEE invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xEF invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xF0 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xF1 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xF2 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xF3 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xF4 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xF5 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xF6 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xF7 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xF8 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xF9 invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xFA invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xFB invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xFC invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xFD invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xFE invalido
+	{.x = 90, .y = 45, .width = 6, .height = 9},	   // 0xFF invalido
 };
 
 typedef enum
@@ -239,8 +347,17 @@ static int getFilenameWidth(const char *name)
 	return width;
 }
 
+static void drawFontSprite(DMAChain *chain, const TextureInfo *font, int x, int y, const SpriteInfo *sprite)
+{
+    uint32_t *ptr = allocatePacket(chain, 4);
+    ptr[0] = gp0_rectangle(true, true, true);
+    ptr[1] = gp0_xy(x, y);
+    ptr[2] = gp0_uv(font->u + sprite->x, font->v + sprite->y, font->clut);
+    ptr[3] = gp0_xy(sprite->width, sprite->height);
+}
+
 static void printStringClipped(
-	DMAChain *chain, const TextureInfo *font, int x, int y, const char *str, int rightEdge)
+	DMAChain *chain, const TextureInfo *font, int x, int y, const char *str, int rightEdge, const SpriteInfo *icon)
 {
 	int currentX = x, currentY = y;
 
@@ -252,6 +369,12 @@ static void printStringClipped(
 	// enough.
 	ptr = allocatePacket(chain, 1);
 	ptr[0] = gp0_texpage(font->page, false, false);
+
+    if (icon)
+    {
+        drawFontSprite(chain, font, currentX, currentY, icon);
+        currentX += icon->width + FONT_SPACE_WIDTH;
+    }
 
 	// Iterate over every character in the string.
 	for (; *str; str++)
@@ -283,15 +406,7 @@ static void printStringClipped(
 		if (currentX + sprite->width > rightEdge)
 			break;
 
-		// Draw the character, summing the UV coordinates of the spritesheet in
-		// VRAM to those of the sprite itself within the sheet. Enable blending
-		// to make sure any semitransparent pixels in the font get rendered
-		// correctly.
-		ptr = allocatePacket(chain, 4);
-		ptr[0] = gp0_rectangle(true, true, true);
-		ptr[1] = gp0_xy(currentX, currentY);
-		ptr[2] = gp0_uv(font->u + sprite->x, font->v + sprite->y, font->clut);
-		ptr[3] = gp0_xy(sprite->width, sprite->height);
+		drawFontSprite(chain, font, currentX, currentY, sprite);
 
 		// Move onto the next character.
 		currentX += sprite->width;
@@ -300,13 +415,13 @@ static void printStringClipped(
 
 static void printString(DMAChain *chain, const TextureInfo *font, int x, int y, const char *str)
 {
-	printStringClipped(chain, font, x, y, str, 320);
+	printStringClipped(chain, font, x, y, str, 320, NULL);
 }
 
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 240
 #define FONT_WIDTH 96
-#define FONT_HEIGHT 84
+#define FONT_HEIGHT 114
 #define FONT_COLOR_DEPTH GP0_COLOR_4BPP
 
 #define TEXTURE_WIDTH 128
@@ -391,7 +506,7 @@ static void drawBootProgress(DMAChain *chain, const TextureInfo *font, const Men
 	drawMenuRectangle(chain, colors->frame, 20, 28, 182, height - 8);
 	drawMenuRectangle(chain, colors->fileList, 21, 29, 180, height - 10);
 	for (unsigned i = 0; i < count; ++i)
-		printStringClipped(chain, font, 25, 32 + 12 * i, lines[i], 198);
+		printStringClipped(chain, font, 25, 32 + 12 * i, lines[i], 198, NULL);
 }
 
 static void showBootProgress(DMAChain *chain, uint32_t *overlay, const TextureInfo *font,
@@ -463,6 +578,7 @@ static uint32_t list_load(void *sectorBuffer, uint8_t command, uint16_t argument
         if (!waitingForInt5)
         {
             *status = MENU_LIST_READ_FAILED;
+            sendMenuCommand(MENU_LOG_ERROR_COMMAND, MENU_ERR_LIST_TRANSFER);
             return 0;
         }
 
@@ -471,7 +587,10 @@ static uint32_t list_load(void *sectorBuffer, uint8_t command, uint16_t argument
         if (*status == MENU_LIST_MORE && fileEntryCount == previousCount)
             *status = MENU_LIST_READ_FAILED;
         if (*status > MENU_LIST_MORE)
+        {
+            sendMenuCommand(MENU_LOG_ERROR_COMMAND, MENU_ERR_LIST_PAGE);
             return 0;
+        }
         command = COMMAND_GET_NEXT_CONTENTS;
         argument = fileEntryCount;
     } while (*status == MENU_LIST_MORE);
@@ -518,7 +637,7 @@ int main(int argc, const char **argv)
 	DMA_DPCR |= DMA_DPCR_CH_ENABLE(DMA_GPU);
 
 	GPU_GP1 = gp1_dmaRequestMode(GP1_DREQ_GP0_WRITE);
-	GPU_GP1 = gp1_dispBlank(false);
+	// setupGPU resets the display. Enable it once the first frame is ready.
 
 	TextureInfo font;
 	TextureInfo logo;
@@ -544,7 +663,7 @@ int main(int argc, const char **argv)
 		.frame = gp0_rgb(255, 255, 255),
 		.fileList = gp0_rgb(0, 48, 128)
 	};
-	loadMenuColors(&colors);
+	bool firstFrame = true;
 	
 	int highlight = 72;
 	int highlightStep = 1;
@@ -583,7 +702,6 @@ int main(int argc, const char **argv)
 		const char *bootProgress[8] = { "Please Wait Loading...", mountLine, "Update TOC", "Check CD",
 		                                "load SYSTEM.CNF" };
 		
-		GPU_GP1 = gp1_fbOffset(bufferX, bufferY);
 
 		chain->nextPacket = chain->data;
 
@@ -805,8 +923,8 @@ int main(int argc, const char **argv)
 					{
 						uint32_t index = start + i;
 						const fileData *file = file_manager_get_file_data(index);
-						const char icon = file->flag == 0 ? '\x8f' : '\x92';
-						const int iconWidth = getFontSprite((uint8_t)icon)->width + FONT_SPACE_WIDTH;
+						const SpriteInfo *icon = file->flag == 0 ? &gameIcon : &folderIcon;
+						const int iconWidth = icon->width + FONT_SPACE_WIDTH;
 
 						if (index == selectedindex)
 						{
@@ -830,10 +948,9 @@ int main(int argc, const char **argv)
 							ptr[2] = gp0_xy(MIN(listWidth, iconWidth + nameWidth + 2), 12);
 						}
 
-						char buffer[MAX_FILE_LENGTH + 3];
 						const unsigned offset = index == selectedindex ? filenameOffset : 0;
-						snprintf(buffer, sizeof(buffer), "%c %s", icon, file->filename + offset);
-						printStringClipped(chain, &font, 10, 17 + i * rowHeight, buffer, 180);
+						printStringClipped(chain, &font, 10, 17 + i * rowHeight,
+                                           file->filename + offset, 180, icon);
 					}
 				}
 				else
@@ -898,8 +1015,16 @@ int main(int argc, const char **argv)
 		previousButtons = buttons;
 		*(chain->nextPacket) = gp0_endTag(0);
 		waitForGP0Ready();
-		waitForVblank();
 		sendLinkedList(chain->data);
+		waitForDMADone();
+		waitForVblank();
+		GPU_GP1 = gp1_fbOffset(bufferX, bufferY);
+		if (firstFrame)
+		{
+			GPU_GP1 = gp1_dispBlank(false);
+			firstFrame = false;
+			loadMenuColors(&colors);
+		}
 
 		if (currentCommand != MENU_COMMAND_NONE)
 		{
@@ -947,6 +1072,7 @@ int main(int argc, const char **argv)
                     (status[4] | (uint16_t)status[5] << 8) != index ||
                     status[6] || status[7])
                 {
+                    sendMenuCommand(MENU_LOG_ERROR_COMMAND, MENU_ERR_PREPARE);
                     errorFrames = 240;
                     currentCommand = MENU_COMMAND_NONE;
                     continue;
@@ -973,6 +1099,7 @@ int main(int argc, const char **argv)
 
                     sendMenuCommand(MENU_RETURN_COMMAND, 0);
                     delayMicroseconds(400000);
+                    sendMenuCommand(MENU_LOG_ERROR_COMMAND, MENU_ERR_DISC);
                     errorFrames = 240;
                     currentCommand = MENU_COMMAND_NONE;
                     continue;

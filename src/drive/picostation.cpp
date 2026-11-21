@@ -35,6 +35,8 @@ picostation::MechCommand m_mechCommand;
 
 pseudoatomic<bool> picostation::g_subqDelay;
 static volatile alarm_id_t s_subqAlarm;
+static pseudoatomic<bool> s_discPauseRequested;
+static pseudoatomic<bool> s_discPauseAcknowledged;
 
 static int s_currentPlaybackSpeed = 1;
 int picostation::g_targetPlaybackSpeed = 1;  // core0: r/w
@@ -156,7 +158,7 @@ static void __time_critical_func(interruptHandler)(unsigned int gpio, uint32_t e
                 const uint64_t c_timeElapsed = c_now - lastLowEventDoor;
                 if (c_timeElapsed >= 50000U)  // Debounce, only reset if the pin was low for more than 50000us(50 ms)
                 {
-                    m_i2s.s_doorPending = true;
+                    m_i2s.notifyDoor();
                 }
                 
                 // Enable the low signal edge detection again
@@ -187,6 +189,46 @@ static void __time_critical_func(send_subq)(const int Sector)
 	picostation::g_subqDelay = false;
 }
 
+void picostation::requestDiscPause()
+{
+    s_discPauseRequested = true;
+    while (!s_discPauseAcknowledged.Load())
+        tight_loop_contents();
+}
+
+void picostation::releaseDiscPause()
+{
+    s_discPauseRequested = false;
+    while (s_discPauseAcknowledged.Load())
+        tight_loop_contents();
+}
+
+void __time_critical_func(picostation::serviceDiscPause)(bool resetting)
+{
+    if (!s_discPauseRequested.Load())
+        return;
+
+    gpio_set_irq_enabled(Pin::XLAT, GPIO_IRQ_EDGE_FALL, false);
+    irq_set_enabled(PIO0_IRQ_0, false);
+    const alarm_id_t pendingAlarm = s_subqAlarm;
+    s_subqAlarm = 0;
+    if (pendingAlarm > 0)
+        cancel_alarm(pendingAlarm);
+    pio_sm_set_enabled(PIOInstance::SUBQ, SM::SUBQ, false);
+    pio_sm_clear_fifos(PIOInstance::SUBQ, SM::SUBQ);
+    gpio_put(Pin::SCOR, 0);
+    gpio_put(Pin::SQSO, 0);
+    g_subqDelay = false;
+    s_discPauseAcknowledged = true;
+    while (s_discPauseRequested.Load())
+        tight_loop_contents();
+    g_driveMechanics.resetDrive();
+    irq_set_enabled(PIO0_IRQ_0, true);
+    if (!resetting)
+        gpio_set_irq_enabled(Pin::XLAT, GPIO_IRQ_EDGE_FALL, true);
+    s_discPauseAcknowledged = false;
+}
+
 [[noreturn]] void __time_critical_func(picostation::core0Entry)()
 {
     g_coreReady[0] = true;
@@ -197,11 +239,12 @@ static void __time_critical_func(send_subq)(const int Sector)
 
     while (true)
     {
+        serviceDiscPause(false);
         if (s_resetPending)
         {
             while (gpio_get(Pin::RESET) == 0)
             {
-                tight_loop_contents();
+                serviceDiscPause(false);
             }
 			reset();
 		}
@@ -234,11 +277,15 @@ static void __time_critical_func(send_subq)(const int Sector)
                 g_driveMechanics.moveToNextSector();
                 g_subqDelay = true;
 
-                s_subqAlarm = add_alarm_in_us(time_us_64() - m_i2s.getLastSectorTime() + c_MaxSubqDelayTime,
+                const uint64_t subqDelay = time_us_64() - m_i2s.getLastSectorTime() + c_MaxSubqDelayTime;
+                const uint32_t interruptState = save_and_disable_interrupts();
+                s_subqAlarm = add_alarm_in_us(subqDelay,
 					[](alarm_id_t id, void *user_data) -> int64_t {
-						send_subq((const int) user_data);
+                        if (id == s_subqAlarm)
+						    send_subq((const int) user_data);
 						return 0;
 					}, (void *) currentSector, true);
+                restore_interrupts(interruptState);
                 if (s_subqAlarm < 0)
                     g_subqDelay = false;
             }
@@ -255,6 +302,7 @@ static void __time_critical_func(send_subq)(const int Sector)
 
 void __time_critical_func(picostation::initHW)()
 {
+    m_i2s.initTransferLock();
 #if DEBUG_LOGGING_ENABLED
 	stdio_init_all();
     stdio_set_chars_available_callback(NULL, NULL);
@@ -367,6 +415,8 @@ void __time_critical_func(picostation::initHW)()
 
     g_coreReady[0] = false;
     g_coreReady[1] = false;
+    s_discPauseRequested = false;
+    s_discPauseAcknowledged = false;
 
     DEBUG_PRINT("ON!\n");
 }
@@ -409,9 +459,10 @@ void __time_critical_func(picostation::reset)()
     DEBUG_PRINT("RESET!\n");
     m_i2s.i2s_set_state(0);
     gpio_set_irq_enabled(Pin::XLAT, GPIO_IRQ_EDGE_FALL, false);
-    if (s_subqAlarm > 0)
-        cancel_alarm(s_subqAlarm);
+    const alarm_id_t pendingAlarm = s_subqAlarm;
     s_subqAlarm = 0;
+    if (pendingAlarm > 0)
+        cancel_alarm(pendingAlarm);
     pio_sm_set_enabled(PIOInstance::SUBQ, SM::SUBQ, false);
     pio_sm_set_enabled(PIOInstance::SOCT, SM::SOCT, false);
     pio_sm_restart(PIOInstance::MECHACON, SM::MECHACON);

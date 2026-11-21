@@ -9,9 +9,6 @@
 // Returns the uint32_t that is parsed.
 #define int32_LM(array, startIndex) (((uint32_t)array[startIndex]) | ((uint32_t)array[startIndex+1] << 8) | ((uint32_t)array[startIndex+2] << 16) | ((uint32_t)array[startIndex+3] << 24))
 
-// Global variables
-extern uint8_t gRootDirData[2048];
-
 // Structs
 
 typedef struct{

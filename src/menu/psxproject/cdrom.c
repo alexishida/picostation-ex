@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 #include "delay.h"
+#include "system.h"
 #include "logging.h"
 
 #if DEBUG_CDROM
@@ -122,7 +123,7 @@ void issueCDROMCommand(uint8_t cmd, const uint8_t *arg, size_t argLength) {
     CDROM_COMMAND = cmd;
 }
 
-static void waitForInterrupt(volatile bool *pending)
+static void waitForCDInterrupt(volatile bool *pending)
 {
     unsigned attempts = 50000;
     while (*pending && waitingForInt5 && attempts--)
@@ -134,9 +135,9 @@ static void waitForInterrupt(volatile bool *pending)
     }
 }
 
-void waitForINT1(){ waitForInterrupt(&waitingForInt1); }
-void waitForINT2(){ waitForInterrupt(&waitingForInt2); }
-void waitForINT3(){ waitForInterrupt(&waitingForInt3); }
+void waitForINT1(){ waitForCDInterrupt(&waitingForInt1); }
+void waitForINT2(){ waitForCDInterrupt(&waitingForInt2); }
+void waitForINT3(){ waitForCDInterrupt(&waitingForInt3); }
 
 void waitForINT5(){
     while(waitingForInt5){
@@ -144,6 +145,37 @@ void waitForINT5(){
     }
 }
 
+
+bool cdromReadPending(void)
+{
+    return cdromReadDataNumSectors || waitingForInt2 || (DMA_CHCR(DMA_CDROM) & DMA_CHCR_ENABLE);
+}
+
+void waitForCDROMRead(void)
+{
+    unsigned attempts = 50000;
+    size_t remaining = cdromReadDataNumSectors;
+    while (waitingForInt5 && cdromReadPending() && attempts--)
+    {
+        delayMicroseconds(100);
+        if (remaining != cdromReadDataNumSectors)
+        {
+            remaining = cdromReadDataNumSectors;
+            attempts = 50000;
+        }
+    }
+    if (!waitingForInt5 || cdromReadPending())
+    {
+        // Disarm INT1 and DMA before the caller reuses its destination.
+        const bool restore = disableInterrupts();
+        cdromReadDataNumSectors = 0;
+        DMA_CHCR(DMA_CDROM) = 0;
+        waitingForInt5 = false;
+        if (restore)
+            enableInterrupts();
+    }
+    atomic_signal_fence(memory_order_acquire);
+}
 
 /// @brief 
 /// @param lba LBA of the sector to read
@@ -155,10 +187,6 @@ void waitForINT5(){
 
 void startCDROMRead(uint32_t lba, void *ptr, size_t numSectors, size_t sectorSize, bool doubleSpeed, bool wait)
 {
-    cdromReadDataPtr = ptr;
-    cdromReadDataNumSectors = numSectors;
-    cdromReadDataSectorSize = sectorSize;
-
 	uint8_t mode = 0;
     CDROMMSF     msf;
 
@@ -179,22 +207,14 @@ void startCDROMRead(uint32_t lba, void *ptr, size_t numSectors, size_t sectorSiz
     waitForINT3();
     if (!waitingForInt5) return;
     //DEBUG_PRINT("Issue CDREAD\n");
+    cdromReadDataPtr = ptr;
+    cdromReadDataSectorSize = sectorSize;
+    atomic_signal_fence(memory_order_release);
+    cdromReadDataNumSectors = numSectors;
     issueCDROMCommand(CDROM_CMD_READ_N, NULL, 0);
     waitForINT3();
-    if (!waitingForInt5) return;
-	
-	if (!waitingForInt5)
-	{
-		return;
-	}
-	
-    if ( !waitingForInt1 ) DEBUG_PRINT(" what's going on!?\n");
-
-    if (wait)
-    {
-        waitForINT1();
-    }
-    //DEBUG_PRINT("Finish read\n");
+    if (wait || !waitingForInt5)
+        waitForCDROMRead();
 }
 
 void updateCDROM_TOC(void) {

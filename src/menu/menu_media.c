@@ -39,6 +39,8 @@ void sendMenuCommand(uint8_t command, uint16_t argument)
         CDROM_TEST_DSP_CMD, (uint8_t)(0xf0 | command), (uint8_t)(argument >> 8), (uint8_t)argument
     };
     issueCDROMCommand(CDROM_CMD_TEST, parameters, sizeof(parameters));
+    if (command == MENU_LOG_ERROR_COMMAND)
+        waitForINT3();
 }
 
 static uint16_t readLE16(const uint8_t *value)
@@ -121,22 +123,34 @@ static void parseColors(const char *config, size_t size, MenuColors *colors)
 void loadMenuColors(MenuColors *colors)
 {
     const uint8_t *data = (const uint8_t *)sectorBuffer + MENU_USER_DATA_OFFSET;
+    bool configReceived = false;
     sendMenuCommand(COMMAND_EXTENDED, EXTENDED_GET_CONFIG << 1);
     for (unsigned attempt = 0; attempt < RESPONSE_ATTEMPTS; ++attempt)
     {
         memset(sectorBuffer, 0, sizeof(sectorBuffer));
         startCDROMRead(MENU_CONFIG_LBA, sectorBuffer, 1, MENU_RAW_SECTOR_BYTES, true, true);
         if (!memcmp(data, "DEAD", 4))
+        {
+            configReceived = true;
             break;
+        }
         if (!memcmp(data, "CFG1", 4))
         {
             uint16_t size = readLE16(data + 4);
             if (size <= MENU_CONFIG_MAX_BYTES)
+            {
                 parseColors((const char *)data + MENU_CONFIG_DATA_OFFSET, size, colors);
+                configReceived = true;
+            }
             break;
         }
     }
     sendMenuCommand(COMMAND_CLEAR, 0);
+    if (!configReceived)
+    {
+        waitForINT3();
+        sendMenuCommand(MENU_LOG_ERROR_COMMAND, MENU_ERR_CONFIG);
+    }
 }
 
 static void startCoverRead(void)
@@ -150,9 +164,7 @@ void resetMenuCover(void)
 {
     if (coverState == COVER_READING)
     {
-        waitForINT1();
-        if (waitingForInt5)
-            waitForINT2();
+        waitForCDROMRead();
         sendMenuCommand(COMMAND_CLEAR, 0);
     }
     coverState = COVER_IDLE;
@@ -164,11 +176,12 @@ bool updateMenuCover(uint16_t index, TextureInfo *texture)
     // One ReadN fetches every part. INT1 signals each sector, the last
     // sector's Pause completes with INT2, and the final DMA drains after it.
     if (reading && waitingForInt5 &&
-        (cdromReadDataNumSectors || (DMA_CHCR(DMA_CDROM) & DMA_CHCR_ENABLE) || waitingForInt2))
+        cdromReadPending())
     {
         if (++coverWaitFrames < 180)
             return false;
         resetMenuCover();
+        sendMenuCommand(MENU_LOG_ERROR_COMMAND, MENU_ERR_COVER);
         coverState = COVER_MISSING;
         return false;
     }
@@ -197,6 +210,7 @@ bool updateMenuCover(uint16_t index, TextureInfo *texture)
 
     if (!waitingForInt5)
     {
+        sendMenuCommand(MENU_LOG_ERROR_COMMAND, MENU_ERR_COVER);
         coverState = COVER_MISSING;
         sendMenuCommand(COMMAND_CLEAR, 0);
         return false;
@@ -205,6 +219,8 @@ bool updateMenuCover(uint16_t index, TextureInfo *texture)
     const uint8_t *part0 = (const uint8_t *)coverRaw + MENU_USER_DATA_OFFSET;
     if (!memcmp(part0, "DEAD", 4) || memcmp(part0, "PART", 4) || readLE16(part0 + 4) != 0)
     {
+        if (memcmp(part0, "DEAD", 4))
+            sendMenuCommand(MENU_LOG_ERROR_COMMAND, MENU_ERR_COVER);
         coverState = COVER_MISSING;
         sendMenuCommand(COMMAND_CLEAR, 0);
         return false;
@@ -233,6 +249,7 @@ bool updateMenuCover(uint16_t index, TextureInfo *texture)
 
     if (!complete)
     {
+        sendMenuCommand(MENU_LOG_ERROR_COMMAND, MENU_ERR_COVER);
         coverState = COVER_MISSING;
         sendMenuCommand(COMMAND_CLEAR, 0);
         return false;

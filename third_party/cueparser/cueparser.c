@@ -214,7 +214,7 @@ void end_parse(struct CueParser* parser, struct CueScheduler* scheduler, const c
 
 static void parse(struct CueParser* parser, struct CueFile* file, struct CueScheduler* scheduler) {
     while (parser->amount--) {
-        int c = *parser->start++;
+        int c = (unsigned char)*parser->start++;
         int isEOW = isspace(c);
         int isEOL = (c == '\r') || (c == '\n');
         int isSpace = isEOW && !isEOL;
@@ -716,6 +716,10 @@ static void read_bytes(struct CueFile* file, struct CueScheduler* scheduler, int
         parse_eof(parser, file, scheduler);
     } else {
         parser->amount = amount;
+        if (parser->cursor == 0 && amount >= 3 && memcmp(buffer, "\xef\xbb\xbf", 3) == 0) {
+            parser->start += 3;
+            parser->amount -= 3;
+        }
         parser->cursor += amount;
         parse(parser, file, scheduler);
     }

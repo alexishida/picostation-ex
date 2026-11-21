@@ -10,6 +10,7 @@ typedef enum {
 
 // LBAs are relative to the start of the disc. Raw ReadN skips the 12-byte sync.
 enum {
+    MENU_LOG_ERROR_COMMAND = 0xD,
     MENU_PREPARE_COMMAND = 0xB,
     MENU_RETURN_COMMAND = 0xC,
     MENU_MOUNT_STATUS_LBA = 110,
@@ -34,4 +35,9 @@ enum {
     MENU_COVER_RGB15_PART_BYTES = 2048,
     MENU_COVER_RGB15_PARTS = MENU_COVER_RGB15_BYTES / MENU_COVER_RGB15_PART_BYTES,
     MENU_COVER_FORMAT_OFFSET = 2320 // Four bytes after the cover payload, at the end of the user data.
+};
+
+enum {
+    MENU_ERR_LIST_TRANSFER, MENU_ERR_LIST_PAGE, MENU_ERR_CONFIG, MENU_ERR_COVER,
+    MENU_ERR_PREPARE, MENU_ERR_DISC, MENU_ERR_COUNT
 };

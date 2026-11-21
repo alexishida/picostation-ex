@@ -168,9 +168,95 @@ int __time_critical_func(picostation::I2S::initDMA)(const volatile void *read_ad
     return channel;
 }
 
+void __time_critical_func(picostation::I2S::i2s_set_state)(uint8_t state)
+{
+    critical_section_enter_blocking(&transferLock);
+    transfer.enabled = state != 0;
+    if (!state)
+        ++transfer.generation;
+    critical_section_exit(&transferLock);
+}
+
+void __time_critical_func(picostation::I2S::publishDriveSector)(int sector)
+{
+    critical_section_enter_blocking(&transferLock);
+    transfer.sector = sector;
+    critical_section_exit(&transferLock);
+}
+
+void picostation::I2S::setReadOption(DiscImage::ReadOption option, bool enabled)
+{
+    critical_section_enter_blocking(&transferLock);
+    if (enabled)
+        transfer.options |= option;
+    else
+        transfer.options &= ~option;
+    critical_section_exit(&transferLock);
+}
+
+picostation::I2S::TransferState __time_critical_func(picostation::I2S::transferSnapshot)()
+{
+    critical_section_enter_blocking(&transferLock);
+    const auto state = transfer;
+    critical_section_exit(&transferLock);
+    return state;
+}
+
+picostation::I2S::TransferResult __time_critical_func(picostation::I2S::startSectorDMA)(const TransferState& expected)
+{
+    critical_section_enter_blocking(&transferLock);
+    const bool ready = transfer.enabled && transfer.sector == expected.sector &&
+                       transfer.generation == expected.generation && transfer.options == expected.options &&
+                       resetRequest.Load() == ResetRequest::None;
+    TransferResult result = TransferResult::Stale;
+    if (ready)
+    {
+        // Keep seek/reset serialized, with only the trigger after the rising edge.
+        const uint32_t syncStart = time_us_32();
+        const auto waitForLRCK = [syncStart](bool level) {
+            while (gpio_get(Pin::LRCK) != level)
+                if (time_us_32() - syncStart >= 100)
+                    return false;
+            return true;
+        };
+        result = TransferResult::ClockTimeout;
+        if (waitForLRCK(false) && waitForLRCK(true))
+        {
+            dma_channel_start(dmaChannel);
+            result = TransferResult::Started;
+        }
+    }
+    critical_section_exit(&transferLock);
+    return result;
+}
+
+void picostation::I2S::enableDoor(bool enabled)
+{
+    critical_section_enter_blocking(&transferLock);
+    doorEnabled = enabled;
+    doorPending = false;
+    critical_section_exit(&transferLock);
+}
+
+void picostation::I2S::notifyDoor()
+{
+    critical_section_enter_blocking(&transferLock);
+    doorPending = doorEnabled;
+    critical_section_exit(&transferLock);
+}
+
+bool picostation::I2S::takeDoorEvent()
+{
+    critical_section_enter_blocking(&transferLock);
+    const bool pending = doorPending;
+    doorPending = false;
+    critical_section_exit(&transferLock);
+    return pending;
+}
+
 void __time_critical_func(picostation::I2S::reinitI2S)()
 {
-    i2s_state = 0;
+    i2s_set_state(0);
     if (dma_channel_is_busy(dmaChannel))
         dma_channel_abort(dmaChannel);
     pio_sm_clear_fifos(PIOInstance::I2S_DATA, SM::I2S_DATA);
@@ -181,9 +267,11 @@ void __time_critical_func(picostation::I2S::reinitI2S)()
 
 void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
 {
+    critical_section_enter_blocking(&transferLock);
     resetRequest = returnToMenu ? ResetRequest::ReturnToMenu : ResetRequest::RestartDisc;
+    critical_section_exit(&transferLock);
     while (resetRequest.Load() != ResetRequest::None)
-        tight_loop_contents();
+        serviceDiscPause(true);
 }
 
 [[noreturn]] void __time_critical_func(picostation::I2S::start)(MechCommand &mechCommand)
@@ -195,11 +283,13 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
     uint8_t nextBuffer = 1;
     uint8_t readBuffer = 0;
     uint8_t activeDMABuffer = 0;
-    static int currentSector = -1;
+    bool listingReady = false;
+    uint8_t cachedOptions = 0;
     DiscImage::DataLocation dataLocation = DiscImage::DataLocation::RAM;
     static uint32_t loadedImageIndex = 0;
     static uint16_t img_count;
     static DiscImage preparedImage;
+    static DiscImage previousImage;
     static bool prepared = false;
     static uint32_t preparedIndex;
     static int preparedSectorMax;
@@ -209,10 +299,21 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
     needFileCheckAction = picostation::FileListingStates::IDLE;
     
     menu_active = true;
-    s_doorPending = false;
+    enableDoor(false);
     resetRequest = ResetRequest::None;
     dmaChannel = initDMA(pioSamples[0], 1176);
     reinitI2S();
+    g_discImage.makeDummyCue();
+
+    const auto publishImage = [&](DiscImage& image, int sectorLimit, bool core0Resetting) {
+        if (!core0Resetting)
+            requestDiscPause();
+        g_discImage.replacePreparedImage(image, previousImage);
+        c_sectorMax = sectorLimit;
+        if (!core0Resetting)
+            releaseDiscPause();
+        previousImage.unload();
+    };
 
     g_coreReady[1] = true;          // Core 1 is ready
     while (!g_coreReady[0].Load())  // Wait for Core 0 to be ready
@@ -227,12 +328,9 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
     uint64_t endTime;
 #endif
 
-    g_discImage.makeDummyCue();
-	
     DirectoryListing::init();
 #ifdef PICOSTATION_SD_BOOT_LOG
-    DirectoryListing::appendBootLog("\r\nBOOT TRACE DMA v3 - SD montado\r\n");
-    const uint32_t bootStart = time_us_32();
+    uint32_t bootStart = time_us_32();
     bool bootReported = false;
     unsigned transfers = 0;
     unsigned syncTimeouts = 0;
@@ -249,12 +347,27 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
     int lastBootLba = 0;
     bool sentPvd = false;
 #endif
+    bool menuConfigSeen = false;
+    const auto restartMenuLog = [&]() {
+        DirectoryListing::beginMenuLog();
+        menuConfigSeen = false;
+#ifdef PICOSTATION_SD_BOOT_LOG
+        bootStart = time_us_32();
+        bootReported = sentPvd = false;
+        transfers = syncTimeouts = resets = cancelledTransfers = 0;
+        configRequests = configBuilt = configValid = configLbaTransfers = 0;
+        listingRequests = listingErrors = listingSectorsBuilt = listingLbaTransfers = 0;
+        lastBootLba = runCount = 0;
+        std::fill_n(lbaTransfers, std::size(lbaTransfers), 0);
+#endif
+    };
 
     while (true)
     {
         DirectoryListing::flushErrors();
         // Sector could change during the loop, so we need to keep track of it
-        currentSector = g_driveMechanics.getSector();
+        const auto state = transferSnapshot();
+        const int currentSector = state.sector;
         
         modChip.sendLicenseString(currentSector, mechCommand);
 		
@@ -274,7 +387,7 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
             DirectoryListing::appendBootLog(line);
             snprintf(line, sizeof(line),
                      "setor_drive=%d i2s=%u dma_ocupado=%u cancelados_posicao_ou_reset=%u\r\n",
-                     currentSector, unsigned(i2s_state.Load()), unsigned(dma_channel_is_busy(dmaChannel)),
+                     currentSector, unsigned(state.enabled), unsigned(dma_channel_is_busy(dmaChannel)),
                      cancelledTransfers);
             DirectoryListing::appendBootLog(line);
             snprintf(line, sizeof(line), "lista_pedidos=%u lista_erros=%u lista_setores_montados=%u dma_lba100=%u\r\n",
@@ -289,27 +402,29 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
 #endif
         if (reset != ResetRequest::None || softReturn)
         {
+            if (reset != ResetRequest::None && (menu_active || reset == ResetRequest::ReturnToMenu))
+                restartMenuLog();
             reinitI2S();
+            listingReady = false;
             preparedImage.unload();
             prepared = false;
             if (reset == ResetRequest::ReturnToMenu || softReturn)
             {
-                g_discImage.unload();
-                g_discImage.makeDummyCue();
-                g_discImage.set_skip_bootsector_fix(false);
-                g_discImage.set_skip_edc(false);
+                preparedImage.makeDummyCue(false);
+                publishImage(preparedImage, 333000, reset != ResetRequest::None);
+                setReadOption(DiscImage::SkipBootSectorFix, false);
+                setReadOption(DiscImage::SkipEdc, false);
                 dataLocation = DiscImage::DataLocation::RAM;
                 menu_active = true;
                 if (reset == ResetRequest::ReturnToMenu)
                     DirectoryListing::gotoRoot();
             }
-            g_discImage.set_skip_bootsector(false);
+            setReadOption(DiscImage::SkipBootSector, false);
             memset(mountStatus, 0, sizeof(mountStatus));
-            s_doorPending = false;
+            enableDoor(!menu_active);
             needFileCheckAction = FileListingStates::IDLE;
-            if (reset == ResetRequest::None)
-                g_driveMechanics.resetDrive();
-            resetRequest = ResetRequest::None;
+            if (reset != ResetRequest::None)
+                resetRequest = ResetRequest::None;
             continue;
         }
 
@@ -348,9 +463,10 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
 #endif
                     }
 
+                    listingReady = true;
                     if (lastSector == 4750)
                         lastSector = -1;
-                    needFileCheckAction = FileListingStates::PROCESS_FILES;
+                    needFileCheckAction = FileListingStates::IDLE;
                     break;
                 }
 
@@ -364,8 +480,9 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                     FRESULT result = FR_NO_FILE;
                     if (DirectoryListing::getPath(index, path, &directory) && !directory)
                         result = preparedImage.load(path, false);
-                    preparedSectorMax = preparedImage.sectorLimit();
                     prepared = result == FR_OK;
+                    if (prepared)
+                        preparedSectorMax = preparedImage.sectorLimit();
                     preparedIndex = index;
                     if (!prepared)
                     {
@@ -389,27 +506,29 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                     const uint32_t index = g_fileArg.Load();
                     bool isDirectory;
                     needFileCheckAction = FileListingStates::IDLE;
-                    if (prepared && preparedIndex == index)
+                    if (!(prepared && preparedIndex == index))
                     {
-                        g_discImage.takePreparedImage(preparedImage);
+                        preparedImage.unload();
                         prepared = false;
-                        c_sectorMax = preparedSectorMax;
+                        if (!DirectoryListing::getPath(index, filePath, &isDirectory) || isDirectory ||
+                            preparedImage.load(filePath, false) != FR_OK)
+                        {
+                            DirectoryListing::recordError(DirectoryListing::Error::MountImage, index);
+                            break;
+                        }
+                        preparedSectorMax = preparedImage.sectorLimit();
                     }
-                    else if (!DirectoryListing::getPath(index, filePath, &isDirectory) || isDirectory ||
-                        g_discImage.load(filePath) != FR_OK)
-                    {
-                        DirectoryListing::recordError(DirectoryListing::Error::MountImage, index);
-                        break;
-                    }
+                    reinitI2S();
+                    publishImage(preparedImage, preparedSectorMax, false);
+                    prepared = false;
 
                     loadedImageIndex = index;
                     dataLocation = DiscImage::DataLocation::SDCard;
 					img_count = DirectoryListing::getDirectoryEntriesCount();
 					menu_active = false;
-					reinitI2S();
-					g_driveMechanics.resetDrive();
-					g_discImage.set_skip_bootsector(false);
-					g_discImage.set_skip_bootsector_fix(false);
+                    enableDoor(true);
+					setReadOption(DiscImage::SkipBootSector, false);
+					setReadOption(DiscImage::SkipBootSectorFix, false);
 					mechCommand.resetBootSectorPattern();
 
 					continue;
@@ -422,6 +541,9 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                     break;
 
                 case FileListingStates::GET_CFG:
+                    if (menuConfigSeen)
+                        restartMenuLog();
+                    menuConfigSeen = true;
 #ifdef PICOSTATION_SD_BOOT_LOG
                     ++configRequests;
 #endif
@@ -433,28 +555,38 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
 					break;
 			}
 		}
-		else if (s_doorPending.Load() && !menu_active)
+		else if (!menu_active && takeDoorEvent())
 		{
-			s_doorPending = false;
             for (uint32_t step = 1; step <= img_count; ++step)
             {
                 const uint32_t index = (loadedImageIndex + step) % img_count;
                 char filePath[c_maxFilePathLength + 1];
                 bool isDirectory;
-                if (DirectoryListing::getPath(index, filePath, &isDirectory) && !isDirectory &&
-                    g_discImage.load(filePath) == FR_OK)
+                preparedImage.unload();
+                prepared = false;
+                if (!DirectoryListing::getPath(index, filePath, &isDirectory) || isDirectory)
+                    continue;
+                if (preparedImage.load(filePath, false) == FR_OK)
                 {
                     loadedImageIndex = index;
                     reinitI2S();
-                    g_driveMechanics.resetDrive();
-                    currentSector = g_driveMechanics.getSector();
+                    publishImage(preparedImage, preparedImage.sectorLimit(), false);
                     break;
                 }
+                DirectoryListing::recordError(DirectoryListing::Error::MountImage, index);
             }
+            continue;
 		}
 		
+        if (cachedOptions != state.options)
+        {
+            std::fill_n(loadedSector, CACHED_SECS, -2);
+            lastSector = -1;
+            cachedOptions = state.options;
+        }
+
         // Data sent via DMA, load the next sector
-        if (currentSector != lastSector && currentSector >= 4503 && currentSector < c_sectorMax)
+        if (currentSector != lastSector && currentSector >= 4503 && currentSector < c_sectorMax.Load())
         {
 			if (!menu_active)
 			{
@@ -485,17 +617,19 @@ void __time_critical_func(picostation::I2S::resetFromConsole)(bool returnToMenu)
                 g_discImage.buildSector(currentSector - c_leadIn, pioSamples[readBuffer], mountStatus, cdScramblingLUT);
                 cacheable = false;
             }
-            else if (menu_active && needFileCheckAction.Load() == FileListingStates::PROCESS_FILES)
-			{
-				if (currentSector == 4750)
-				{
-					g_discImage.buildSector(currentSector - c_leadIn, pioSamples[readBuffer], picostation::DirectoryListing::getFileListingData(), cdScramblingLUT);
+            else if (menu_active && listingReady && currentSector == 4750)
+            {
+                // The console can seek back to the same page after the first DMA attempt.
+                g_discImage.buildSector(currentSector - c_leadIn, pioSamples[readBuffer],
+                                        DirectoryListing::getFileListingData(), cdScramblingLUT);
+                cacheable = false;
 #ifdef PICOSTATION_SD_BOOT_LOG
-                    ++listingSectorsBuilt;
+                ++listingSectorsBuilt;
 #endif
-					needFileCheckAction = picostation::FileListingStates::IDLE;
-				}
-				else if (currentSector >= c_leadIn + c_preGap + MENU_COVER_LBA &&
+            }
+            else if (menu_active && needFileCheckAction.Load() == FileListingStates::PROCESS_FILES)
+            {
+                if (currentSector >= c_leadIn + c_preGap + MENU_COVER_LBA &&
                          currentSector < c_leadIn + c_preGap + MENU_COVER_LBA + MENU_COVER_RGB15_PARTS)
 				{
 					g_discImage.buildSector(currentSector - c_leadIn, pioSamples[readBuffer], picostation::DirectoryListing::readCover(currentSector - c_leadIn - c_preGap - MENU_COVER_LBA), cdScramblingLUT);
@@ -523,7 +657,7 @@ not_menu_request:
 #endif
 				// Load the next sector
 				cacheable = g_discImage.readSector(pioSamples[readBuffer], currentSector - c_leadIn, dataLocation,
-                                                  cdScramblingLUT);
+                                                  cdScramblingLUT, state.options);
                 if (!cacheable && dataLocation == DiscImage::DataLocation::SDCard)
                     DirectoryListing::recordError(DirectoryListing::Error::SectorRead, currentSector - c_leadIn - c_preGap);
 #if DEBUG_I2S
@@ -544,34 +678,14 @@ not_menu_request:
 continue_transfer:
 
         // Start the next transfer if the DMA channel is not busy
-        if (!dma_channel_is_busy(dmaChannel) && i2s_state.Load())
+        if (!dma_channel_is_busy(dmaChannel) && state.enabled)
         {
-			if (currentSector >= 4503 && currentSector < c_sectorMax)
+			if (currentSector >= 4503 && currentSector < c_sectorMax.Load())
 			{
-                if (resetRequest.Load() != ResetRequest::None ||
-                    g_driveMechanics.getSector() != currentSector)
-                {
-#ifdef PICOSTATION_SD_BOOT_LOG
-                    if (!bootReported)
-                        ++cancelledTransfers;
-#endif
-                    continue;
-                }
+                dma_channel_set_read_addr(dmaChannel, pioSamples[nextBuffer], false);
 
-                activeDMABuffer = nextBuffer;
-                dma_channel_set_read_addr(dmaChannel, pioSamples[activeDMABuffer], false);
-
-                // Preload the DMA address so only the trigger follows the LRCK edge.
-                const uint32_t syncStart = time_us_32();
-                const auto waitForLRCK = [syncStart](bool level) {
-                    while (gpio_get(Pin::LRCK) != level)
-                    {
-                        if (time_us_32() - syncStart >= 100)
-                            return false;
-                    }
-                    return true;
-                };
-                if (!waitForLRCK(false) || !waitForLRCK(true))
+                const auto result = startSectorDMA(state);
+                if (result == TransferResult::ClockTimeout)
                 {
                     DirectoryListing::recordError(DirectoryListing::Error::LRCK, currentSector);
 #ifdef PICOSTATION_SD_BOOT_LOG
@@ -580,9 +694,17 @@ continue_transfer:
 #endif
                     continue;
                 }
-                dma_channel_start(dmaChannel);
+                if (result == TransferResult::Stale)
+                {
+#ifdef PICOSTATION_SD_BOOT_LOG
+                    if (!bootReported)
+                        ++cancelledTransfers;
+#endif
+                    continue;
+                }
                 m_lastSectorTime = time_us_64();
                 m_sectorSending = lastSector;
+                activeDMABuffer = nextBuffer;
 #ifdef PICOSTATION_SD_BOOT_LOG
                 if (!bootReported)
                 {
@@ -593,7 +715,7 @@ continue_transfer:
                         ++configLbaTransfers;
                     if (menu_active && lastBootLba == 100)
                         ++listingLbaTransfers;
-                    const uint8_t flags = unsigned(mechCommand.getSens(SENS::GFS)) |
+                    const uint8_t flags = unsigned(mechCommand.getGfsShared()) |
                                           (unsigned(mechCommand.getSoct()) << 1) |
                                           (unsigned(g_subqDelay.Load()) << 2);
                     traceTransfer(time_us_32() - bootStart, lastBootLba, flags);

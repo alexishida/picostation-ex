@@ -1,4 +1,5 @@
 #include "directory_listing.h"
+#include "pseudo_atomics.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -46,10 +47,13 @@ static bool __time_critical_func(isVisibleEntry)(const FILINFO& entry)
            (length > 4 && strcasecmp(entry.fname + length - 4, ".cue") == 0);
 }
 
-static bool appendLog(const char* line)
+static bool newLogPending = true;
+static uint64_t logRetryUs;
+
+static bool writeLog(const char* line, BYTE mode)
 {
     static FIL log;
-    if (sd_present && f_open(&log, "/erro.log", FA_OPEN_APPEND | FA_WRITE) == FR_OK)
+    if (sd_present && f_open(&log, "/erro.log", mode | FA_WRITE) == FR_OK)
     {
         UINT written;
         const UINT size = strlen(line);
@@ -58,6 +62,23 @@ static bool appendLog(const char* line)
         return result == FR_OK && written == size && closed == FR_OK;
     }
     return false;
+}
+
+static bool openSessionLog()
+{
+    if (!newLogPending)
+        return true;
+    if (!sd_present || time_us_64() < logRetryUs)
+        return false;
+    newLogPending = !writeLog("INICIO MENU - SD montado\r\n", FA_CREATE_ALWAYS);
+    if (newLogPending)
+        logRetryUs = time_us_64() + 1000000;
+    return !newLogPending;
+}
+
+static bool appendLog(const char* line)
+{
+    return openSessionLog() && writeLog(line, FA_OPEN_APPEND);
 }
 
 #ifdef PICOSTATION_SD_BOOT_LOG
@@ -76,6 +97,32 @@ struct ErrorEntry {
 };
 ErrorEntry errors[static_cast<unsigned>(DirectoryListing::Error::Count)];
 unsigned pendingErrors;
+// Core 0 publishes cumulative counters. Only core 1 writes to FatFs.
+pseudoatomic<unsigned> menuTotals[MENU_ERR_COUNT];
+pseudoatomic<unsigned> menuSequence;
+unsigned lastMenuTotals[MENU_ERR_COUNT];
+unsigned lastMenuSequence;
+}
+
+void DirectoryListing::reportMenuError(unsigned code)
+{
+    if (code < MENU_ERR_COUNT)
+    {
+        menuTotals[code] = menuTotals[code].Load() + 1;
+        menuSequence = menuSequence.Load() + 1;
+    }
+}
+
+void DirectoryListing::beginMenuLog()
+{
+    lastMenuSequence = menuSequence.Load();
+    for (unsigned i = 0; i < MENU_ERR_COUNT; ++i)
+        lastMenuTotals[i] = menuTotals[i].Load();
+    memset(errors, 0, sizeof(errors));
+    pendingErrors = 0;
+    newLogPending = true;
+    logRetryUs = 0;
+    openSessionLog();
 }
 
 // Called only by the sector reader on core 1. Keep disk I/O out of the LRCK wait.
@@ -94,12 +141,30 @@ void DirectoryListing::recordError(Error error, int detail)
 
 void __time_critical_func(DirectoryListing::flushErrors)()
 {
-    if (!pendingErrors || !sd_present)
+    const unsigned sequence = menuSequence.Load();
+    if (sequence != lastMenuSequence)
+    {
+        lastMenuSequence = sequence;
+        for (unsigned i = 0; i < MENU_ERR_COUNT; ++i)
+        {
+            const unsigned total = menuTotals[i].Load();
+            const unsigned delta = total - lastMenuTotals[i];
+            if (delta)
+            {
+                const unsigned slot = static_cast<unsigned>(Error::MenuListTransfer) + i;
+                recordError(static_cast<Error>(slot), i);
+                errors[slot].count += delta - 1;
+                lastMenuTotals[i] = total;
+            }
+        }
+    }
+    if (!openSessionLog() || !pendingErrors)
         return;
 
     static constexpr const char* names[] = {
         "montar_sd", "listar_diretorio", "preparar_imagem", "montar_imagem",
-        "ler_setor", "timeout_lrck", "ler_capa", "ler_config"
+        "ler_setor", "timeout_lrck", "ler_capa", "ler_config", "fatfs_diretorio", "menu_transferir_lista",
+        "menu_ler_pagina", "menu_config", "menu_capa", "menu_preparar_jogo", "menu_ler_disco"
     };
     static_assert(sizeof(names) / sizeof(names[0]) == sizeof(errors) / sizeof(errors[0]));
     const uint64_t now = time_us_64();
@@ -128,6 +193,7 @@ void __time_critical_func(DirectoryListing::init)()
     memset(&cover_fp, 0, sizeof(FIL));
     memset(&cfg_fp, 0, sizeof(FIL));
     
+    beginMenuLog();
     FRESULT fr = f_mount(&s_fatFS, "", 1);
 	
     if (fr != FR_OK)
@@ -211,7 +277,10 @@ bool __time_critical_func(DirectoryListing::getDirectoryEntries)(const uint32_t 
 
     if (!sd_present)
     {
-        sd_present = f_mount(&s_fatFS, "", 1) == FR_OK;
+        const FRESULT mounted = f_mount(&s_fatFS, "", 1);
+        sd_present = mounted == FR_OK;
+        if (!sd_present)
+            recordError(Error::MountSD, mounted);
         if (!sd_present)
         {
             setListingError(MENU_LIST_NO_SD);
@@ -281,6 +350,7 @@ uint16_t __time_critical_func(DirectoryListing::getDirectoryEntriesCount)()
     
     if (res != FR_OK)
     {
+        recordError(Error::DirectoryIO, res);
         DEBUG_PRINT("f_opendir error: (%d)\n", res);
         return 0;
     }
@@ -318,6 +388,8 @@ uint16_t __time_critical_func(DirectoryListing::getDirectoryEntriesCount)()
         }
     }
     
+    if (res != FR_OK)
+        recordError(Error::DirectoryIO, res);
     f_closedir(&dir);
     return fileEntryCount;
 }
@@ -362,6 +434,7 @@ bool __time_critical_func(DirectoryListing::getDirectoryEntry)(uint32_t index, c
     
     if (res != FR_OK)
     {
+        recordError(Error::DirectoryIO, res);
         DEBUG_PRINT("f_opendir error: (%d)\n", res);
         return false;
     }
@@ -404,6 +477,8 @@ bool __time_critical_func(DirectoryListing::getDirectoryEntry)(uint32_t index, c
         }
     }
 
+    if (res != FR_OK)
+        recordError(Error::DirectoryIO, res);
     f_closedir(&dir);
     return false;
 }

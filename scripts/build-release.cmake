@@ -23,21 +23,27 @@ foreach(setting IN ITEMS PICO_SDK_PATH PICO_TOOLCHAIN_PATH picotool_DIR)
     endif()
 endforeach()
 
-set(ode_args ${common_args} -DPICOSTATION_BUILD_MENU=ON -DPICOSTATION_SD_BOOT_LOG=OFF)
+set(ode_args ${common_args} -DPICOSTATION_SD_BOOT_LOG=ON -DPICOSTATION_USB_LOG=OFF)
 foreach(setting IN ITEMS PICOSTATION_MIPS_TOOLCHAIN_PATH Python3_EXECUTABLE MKPSXISO_EXECUTABLE)
     if(DEFINED ${setting})
         list(APPEND ode_args "-D${setting}=${${setting}}")
     endif()
 endforeach()
 
+set(menu_dir "${build_dir}/picostationex_PU8/menu")
 foreach(variant IN LISTS variants)
+    if(variant STREQUAL "picostationex_PU8")
+        set(menu_args -DPICOSTATION_BUILD_MENU=ON)
+    else()
+        set(menu_args -DPICOSTATION_BUILD_MENU=OFF "-DPICOSTATION_MENU_IMAGE=${menu_dir}/picostation-menu.bin")
+    endif()
     execute_process(
         COMMAND "${CMAKE_COMMAND}" -S "${project_dir}" -B "${build_dir}/${variant}"
-                "-DPICOSTATION_VARIANT=${variant}" ${ode_args}
+                "-DPICOSTATION_VARIANT=${variant}" ${ode_args} ${menu_args}
         COMMAND_ERROR_IS_FATAL ANY
     )
     execute_process(
-        COMMAND "${CMAKE_COMMAND}" --build "${build_dir}/${variant}" --config Release
+        COMMAND "${CMAKE_COMMAND}" --build "${build_dir}/${variant}" --config Release --parallel
         COMMAND_ERROR_IS_FATAL ANY
     )
 endforeach()
@@ -45,12 +51,12 @@ endforeach()
 find_program(PS1_PACKER_EXECUTABLE NAMES ps1-packer REQUIRED)
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -S "${project_dir}/cmake/pico-booty" -B "${build_dir}/pico_booty"
-            "-DPICOSTATION_MENU_EXE=${build_dir}/picostationex_PU8/menu/picostation-menu.psexe"
+            "-DPICOSTATION_MENU_EXE=${menu_dir}/picostation-menu.psexe"
             "-DPS1_PACKER_EXECUTABLE=${PS1_PACKER_EXECUTABLE}" ${common_args}
     COMMAND_ERROR_IS_FATAL ANY
 )
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build "${build_dir}/pico_booty" --config Release
+    COMMAND "${CMAKE_COMMAND}" --build "${build_dir}/pico_booty" --config Release --parallel
     COMMAND_ERROR_IS_FATAL ANY
 )
 file(MAKE_DIRECTORY "${release_dir}")

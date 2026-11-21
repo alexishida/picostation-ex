@@ -24,25 +24,20 @@ class DiscImage {
     FRESULT load(const TCHAR *targetCue, bool updateSectorLimit = true);
     int sectorLimit() const;
     void unload();
-    void takePreparedImage(DiscImage& prepared);
+    void replacePreparedImage(DiscImage& prepared, DiscImage& previous);
     SubQ::Data generateSubQ(const int sector);
     bool hasData() { return m_hasData; };
-    void makeDummyCue();
-    bool readSector(void *buffer, const int sector, DataLocation location, const uint16_t *scramling);
-    void readSectorRAM(void *buffer, const int sector, const uint16_t *scramling);
-    bool readSectorSD(void *buffer, const int sector, const uint16_t *scramling);
-    void set_skip_bootsector(bool skip) { skip_bootsector =  skip; }
-    void set_skip_bootsector_fix(bool skip) { skip_bootsector_fix = skip; }
-	void set_skip_edc(bool skip) { skip_edc =  skip; }
+    void makeDummyCue(bool updateSectorLimit = true);
+    enum ReadOption : uint8_t { SkipBootSector = 1, SkipBootSectorFix = 2, SkipEdc = 4 };
+    bool readSector(void *buffer, int sector, DataLocation location, const uint16_t *scramling, uint8_t options);
+    void readSectorRAM(void *buffer, int sector, const uint16_t *scramling);
+    bool readSectorSD(void *buffer, int sector, const uint16_t *scramling, uint8_t options);
 
   private:
     CueDisc m_cueDisc{};
     bool m_hasData = false;
     int m_currentLogicalTrack = 0;
     uint64_t m_nextReadRecovery = 0;
-    bool skip_bootsector = false;
-    bool skip_bootsector_fix = false;
-    bool skip_edc = false;
 };
 
 extern DiscImage g_discImage;

@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "hardware/pio.h"
+#include "pseudo_atomics.h"
 
 #include "picostation_pinout.h"
 
@@ -80,7 +81,7 @@ constexpr int c_leadIn = 4500;
 constexpr int c_preGap = 150;
 
 constexpr int c_sectorMin = 0;
-extern int c_sectorMax;
+extern pseudoatomic<int> c_sectorMax;
 
 //uint32_t c_MaxTrackMoveTime = 15;//35714;//139;
 constexpr uint32_t c_MaxSubqDelayTime = 3333;  // uS

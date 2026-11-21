@@ -12,6 +12,7 @@ namespace picostation {
 class MechCommand {
   public:
     bool getSens(const size_t what) const;
+    bool getGfsShared();
     void setSens(const size_t what, const bool new_value);
     void setcoutsens() { m_currentSens = 12;}
     bool getSoct();
@@ -199,6 +200,7 @@ class MechCommand {
         1   // $FX - 0
     };
     pseudoatomic<bool> m_soctEnabled;
+    pseudoatomic<bool> m_gfsShared;
 };
 }  // namespace picostation
 

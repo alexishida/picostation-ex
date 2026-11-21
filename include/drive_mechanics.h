@@ -13,21 +13,14 @@ class DriveMechanics {
   public:
     void moveToNextSector();
     void setSector(uint32_t step, bool rev);
-    int getSector() { return m_sector; }
+    int getSector();
     void moveSled(MechCommand &mechCommand);
     bool servo_valid();
     void startSled();
     void stopSled() { sled_work = false; }
     uint32_t get_track_count() { return cur_track_counter;}
 	
-    void resetDrive()
-    {
-      sled_work = false;
-      m_sector = 0;
-      cur_track_counter = 0;
-      cur_zone = 0;
-      skip_subq = 0;
-    }
+    void resetDrive();
 
     bool isSledStopped() { return !sled_work; }
     

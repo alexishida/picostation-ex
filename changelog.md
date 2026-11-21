@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Firmware and menu
+
+- Coordinate disc image publication, sector limits, subcode and GFS across the two Pico cores, and protect sector transfers during seeks and resets.
+- Keep a directory listing available for repeated sector reads and correct the listing terminator size.
+- Fix menu startup with the expanded font by transferring the complete texture to GPU VRAM. Display the first menu frame before reading configuration.
+- Support accented names in the menu and UTF-8 CUE track references when representable in CP850.
+- Improve completion handling for CD reads and support ISO directories spanning multiple sectors.
+- Start a fresh `erro.log` for each menu session and record firmware and menu errors. Release builds include SD boot diagnostics and disable USB logging.
+
+### Build and validation
+
+- Build the current menu once per release and reuse its image across the four ODE profiles and its executable for Pico Booty. Build steps run in parallel.
+- Archive the firmware hardening OpenSpec change and document the menu boot investigation.
+- The user confirmed menu startup and game loading on PU-18 after the font DMA fix. Validation of the latest logging changes, remaining board profiles, disc swaps, subcode captures and timing measurements remains pending.
+
 ## 1.0.0
 
 PicoStation EX is an optical drive emulator (ODE) for the original PlayStation that loads CUE/BIN images from an SD card. Alex Ishida developed this version to modernize megavolt85's original PicoStation and fix problems in the firmware and the menu.
@@ -24,6 +41,8 @@ PicoStation EX is an optical drive emulator (ODE) for the original PlayStation t
 - Fast Boot and Regular Boot are available for recognized games. Audio-only discs and discs without a PlayStation signature follow the normal boot. The boot window lets you toggle EDC correction and Bootsector Fix.
 - Game ID reading recognizes the entire `BOOT` key in `SYSTEM.CNF` and extracts the executable name from paths with subfolders.
 - The menu accepts 128 × 128 `.cov` covers in RGB555 or with an indexed palette for games and folders. Colors can be customized through `config.ini` at the SD card root.
+- Cover loading fetches all 16 reserved sectors in a single read with a shorter 12-frame debounce, and the CD DMA and pause completion are checked before the read is consumed.
+- Accented file names display correctly: FatFs converts long names to CP850 and the menu font covers the accented Latin letters of that table, falling back to the invalid-character box for codes without a glyph.
 
 ### Build and validation
 

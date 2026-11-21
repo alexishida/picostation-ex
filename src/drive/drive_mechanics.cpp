@@ -23,23 +23,38 @@ uint32_t sect_per_track[ZONE_CNT] = {	8,    9,    10,    11,    12,    13,    14
 
 picostation::DriveMechanics picostation::g_driveMechanics;
 
+int picostation::DriveMechanics::getSector() { return m_i2s.getDriveSector(); }
+
+void picostation::DriveMechanics::resetDrive()
+{
+    sled_work = false;
+    m_sector = 0;
+    cur_track_counter = 0;
+    cur_zone = 0;
+    skip_subq = 0;
+    m_i2s.publishDriveSector(0);
+}
+
 void __time_critical_func(picostation::DriveMechanics::moveToNextSector)()
 {
-	if(m_sector < c_sectorMax){
+	const uint32_t irqState = save_and_disable_interrupts();
+	if(m_sector < c_sectorMax.Load()){
 		m_sector++;
+        m_i2s.publishDriveSector(m_sector);
 	}
 	
 	if (m_sector > zone[cur_zone] && cur_zone < ZONE_MAX)
 	{
 		cur_zone++;
 	}
+    restore_interrupts(irqState);
 }
 
 void __time_critical_func(picostation::DriveMechanics::setSector)(uint32_t step, bool rev)
 {
 	m_i2s.i2s_set_state(0);
 
-    const uint32_t sectorLimit = c_sectorMax;
+    const uint32_t sectorLimit = c_sectorMax.Load();
     m_sector = std::min(m_sector, sectorLimit);
     cur_zone = std::lower_bound(zone, zone + ZONE_MAX, m_sector) - zone;
 
@@ -82,6 +97,7 @@ void __time_critical_func(picostation::DriveMechanics::setSector)(uint32_t step,
 	
     cur_zone = std::lower_bound(zone, zone + ZONE_MAX, m_sector) - zone;
     skip_subq = m_sector;
+    m_i2s.publishDriveSector(m_sector);
 #ifdef DEBUG_CMD	
 	DEBUG_PRINT("set sector %d\n", m_sector-4500);
 #endif
@@ -89,7 +105,7 @@ void __time_critical_func(picostation::DriveMechanics::setSector)(uint32_t step,
 
 bool __time_critical_func(picostation::DriveMechanics::servo_valid)()
 {
-	return m_sector < c_sectorMax;
+	return m_sector < c_sectorMax.Load();
 
 }
 

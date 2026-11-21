@@ -172,6 +172,11 @@ void __time_critical_func(picostation::MechCommand::processLatchedCommand)()
 		
 		case MECH_CMD_CUSTOM:
 		{
+            if (command.custom_cmd.cmd == MENU_LOG_ERROR_COMMAND)
+            {
+                DirectoryListing::reportMenuError(command.custom_cmd.arg);
+                break;
+            }
 			g_fileArg = command.custom_cmd.arg;
 
 			switch (command.custom_cmd.cmd)
@@ -242,11 +247,11 @@ void __time_critical_func(picostation::MechCommand::processLatchedCommand)()
 					switch (command.custom_cmd.arg >> 1)
 					{
 						case EXTENDED_SKIP_BOOTSECTOR:
-							g_discImage.set_skip_bootsector_fix(command.custom_cmd.arg & 1);
+							m_i2s.setReadOption(DiscImage::SkipBootSectorFix, command.custom_cmd.arg & 1);
 							break;
 						
 						case EXTENDED_SKIP_EDC:
-							g_discImage.set_skip_edc(command.custom_cmd.arg & 1);
+							m_i2s.setReadOption(DiscImage::SkipEdc, command.custom_cmd.arg & 1);
 							break;
 						
 						case EXTENDED_GET_CFG:
@@ -326,7 +331,7 @@ void __time_critical_func(picostation::MechCommand::setBootSectorPattern) (uint8
 
 			if (m_bootSectorPattern == 0b0111)
 			{
-				g_discImage.set_skip_bootsector(true); 
+				m_i2s.setReadOption(DiscImage::SkipBootSector, true);
 				DEBUG_PRINT("BOOTSECTOR PATTERN\n");
 				return;
 			}
@@ -336,9 +341,13 @@ void __time_critical_func(picostation::MechCommand::setBootSectorPattern) (uint8
 
 bool __time_critical_func(picostation::MechCommand::getSens)(const size_t what) const { return m_sensData[what]; }
 
+bool picostation::MechCommand::getGfsShared() { return m_gfsShared.Load(); }
+
 void __time_critical_func(picostation::MechCommand::setSens)(const size_t what, const bool new_value)
 {
     m_sensData[what] = new_value;
+    if (what == SENS::GFS)
+        m_gfsShared = new_value;
     if (what == m_currentSens)
     {
         gpio_put(Pin::SENS, new_value);
